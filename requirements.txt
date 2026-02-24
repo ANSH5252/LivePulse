@@ -1,0 +1,5 @@
+flask
+flask-socketio
+redis
+mysql-connector-python
+flask-cors
