@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LivePulse - Vote Now!</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f9; }
+        .btn { padding: 15px 30px; font-size: 20px; margin: 10px; cursor: pointer; border: none; border-radius: 8px; color: white; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn-a { background-color: #3498db; }
+        .btn-b { background-color: #e74c3c; }
+        #status { margin-top: 20px; font-size: 18px; font-weight: bold; color: #2c3e50; }
+    </style>
+</head>
+<body>
+
+    <h1>LivePulse Voting</h1>
+    <p>Select your favorite candidate:</p>
+
+    <button class="btn btn-a" onclick="castVote('Candidate_A')">Vote for Candidate A</button>
+    <button class="btn btn-b" onclick="castVote('Candidate_B')">Vote for Candidate B</button>
+
+    <p id="status">Waiting for your vote...</p>
+
+    <script>
+        // The JavaScript function that talks to Python Backend
+        async function castVote(candidateName) {
+            const statusText = document.getElementById('status');
+            statusText.innerText = "Sending vote... ⏳";
+
+            try {
+                // This replaces the PowerShell Invoke-RestMethod command!
+                const response = await fetch('http://127.0.0.1:5000/api/vote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ candidate: candidateName })
+                });
+
+                const data = await response.json();
+
+                // Update the text on the screen with the response from Python/Redis
+                if (data.status === 'success') {
+                    statusText.innerText = `✅ Success! ${data.candidate} now has ${data.new_total} votes!`;
+                } else {
+                    statusText.innerText = "❌ Error recording vote.";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                statusText.innerText = "❌ Cannot connect to server. Is Flask running?";
+            }
+        }
+    </script>
+</body>
+</html>
