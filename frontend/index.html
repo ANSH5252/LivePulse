@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LivePulse - Vote Now!</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f9; }
         .btn { padding: 15px 30px; font-size: 20px; margin: 10px; cursor: pointer; border: none; border-radius: 8px; color: white; transition: 0.2s; }
         .btn:hover { opacity: 0.8; }
         .btn-a { background-color: #3498db; }
         .btn-b { background-color: #e74c3c; }
-        #status { margin-top: 20px; font-size: 18px; font-weight: bold; color: #2c3e50; }
+        .scoreboard { margin-top: 30px; font-size: 24px; font-weight: bold; background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .score { margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -21,35 +23,34 @@
     <button class="btn btn-a" onclick="castVote('Candidate_A')">Vote for Candidate A</button>
     <button class="btn btn-b" onclick="castVote('Candidate_B')">Vote for Candidate B</button>
 
-    <p id="status">Waiting for your vote...</p>
+    <div class="scoreboard">
+        <h2>Live Results 🔴</h2>
+        <div class="score">Candidate A: <span id="score-a">0</span></div>
+        <div class="score">Candidate B: <span id="score-b">0</span></div>
+    </div>
 
     <script>
-        // The JavaScript function that talks to Python Backend
-        async function castVote(candidateName) {
-            const statusText = document.getElementById('status');
-            statusText.innerText = "Sending vote... ⏳";
+        // NEW: Connect to the WebSocket server
+        const socket = io('http://127.0.0.1:5000');
 
+        // NEW: Broadcast the 'score_update' from Python
+        socket.on('score_update', function(allScores) {
+            // allScores looks like: { "Candidate_A": "5", "Candidate_B": "2" }
+            if(allScores.Candidate_A) document.getElementById('score-a').innerText = allScores.Candidate_A;
+            if(allScores.Candidate_B) document.getElementById('score-b').innerText = allScores.Candidate_B;
+        });
+
+        // The exact same vote function
+        async function castVote(candidateName) {
             try {
-                // This replaces the PowerShell Invoke-RestMethod command!
-                const response = await fetch('http://127.0.0.1:5000/api/vote', {
+                await fetch('http://127.0.0.1:5000/api/vote', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ candidate: candidateName })
                 });
-
-                const data = await response.json();
-
-                // Update the text on the screen with the response from Python/Redis
-                if (data.status === 'success') {
-                    statusText.innerText = `✅ Success! ${data.candidate} now has ${data.new_total} votes!`;
-                } else {
-                    statusText.innerText = "❌ Error recording vote.";
-                }
+                // The WebSocket will catch the update.
             } catch (error) {
-                console.error("Error:", error);
-                statusText.innerText = "❌ Cannot connect to server. Is Flask running?";
+                console.error("Error connecting to server:", error);
             }
         }
     </script>

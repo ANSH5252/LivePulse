@@ -1,25 +1,26 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_socketio import SocketIO
 import redis
 
-# 1. Initialize the Flask App
 app = Flask(__name__)
-CORS(app) # Allows frontend to talk to the backend safely
+CORS(app)
 
-# 2. Connect to Redis
+# NEW: Initialize SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Connect to Redis
 try:
     redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-    redis_client.ping() # Tests the connection
-    print("Successfully connected to Redis!")
+    redis_client.ping()
+    print("✅ Successfully connected to Redis!")
 except redis.ConnectionError:
-    print("Failed to connect to Redis. Is the Redis server running?")
+    print("❌ Failed to connect to Redis.")
 
-# 3. Creating a Simple Test Route
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "LivePulse API is running!"})
 
-# 4. Creating the Voting Route
 @app.route('/api/vote', methods=['POST'])
 def handle_vote():
     data = request.json
@@ -28,15 +29,17 @@ def handle_vote():
     if not candidate_name:
         return jsonify({"error": "No candidate provided"}), 400
 
-    # Increase the candidate's score by 1 in Redis
+    # 1. Increase the score in Redis (Fast Write)
     redis_client.hincrby("poll_results", candidate_name, 1)
-    new_total = redis_client.hget("poll_results", candidate_name)
 
-    return jsonify({
-        "status": "success",
-        "candidate": candidate_name,
-        "new_total": new_total
-    })
+    # 2. Fetch the entire scoreboard
+    all_scores = redis_client.hgetall("poll_results")
+
+    # 3. NEW: The Broadcast
+    socketio.emit('score_update', all_scores)
+
+    return jsonify({"status": "success"})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # NEW: Run using socketio.run instead of app.run to enable WebSockets
+    socketio.run(app, debug=True, port=5000)
