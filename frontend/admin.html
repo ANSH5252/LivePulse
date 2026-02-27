@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LivePulse - Create Poll</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; display: flex; justify-content: center; }
+        .admin-container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { color: #dc3545; margin-top: 0; }
+        label { font-weight: bold; display: block; margin-top: 15px; }
+        input[type="text"] { width: 90%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        .option-group { margin-bottom: 10px; }
+        button { padding: 10px 15px; margin-top: 15px; cursor: pointer; border: none; border-radius: 4px; font-size: 16px; width: 100%; transition: 0.2s; }
+        .add-btn { background-color: #17a2b8; color: white; margin-bottom: 20px; }
+        .add-btn:hover { background-color: #138496; }
+        .submit-btn { background-color: #28a745; color: white; font-weight: bold; font-size: 18px; }
+        .submit-btn:hover { background-color: #218838; }
+        .back-link { display: block; text-align: center; margin-top: 15px; color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+    <div class="admin-container">
+        <h2>🛠️ Create a New Poll</h2>
+        <form action="/admin" method="POST">
+            
+            <label>Poll Question:</label>
+            <input type="text" name="title" placeholder="e.g., Who is the best superhero?" required>
+
+            <label>Voting Options:</label>
+            <div id="options-container">
+                <div class="option-group"><input type="text" name="options[]" placeholder="Option 1" required></div>
+                <div class="option-group"><input type="text" name="options[]" placeholder="Option 2" required></div>
+            </div>
+
+            <button type="button" class="add-btn" onclick="addOption()">➕ Add Another Option</button>
+
+            <button type="submit" class="submit-btn">🚀 Launch Poll</button>
+        </form>
+        <a href="/" class="back-link">← Back to Dashboard</a>
+    </div>
+
+    <script>
+        let optionCount = 2;
+        // Simple JS function to dynamically add new text inputs to the form
+        function addOption() {
+            optionCount++;
+            const container = document.getElementById('options-container');
+            const newDiv = document.createElement('div');
+            newDiv.className = 'option-group';
+            newDiv.innerHTML = `<input type="text" name="options[]" placeholder="Option ${optionCount}" required>`;
+            container.appendChild(newDiv);
+        }
+    </script>
+
+</body>
+</html>

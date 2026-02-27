@@ -3,56 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LivePulse - Vote Now!</title>
-    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <title>LivePulse - Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f9; }
-        .btn { padding: 15px 30px; font-size: 20px; margin: 10px; cursor: pointer; border: none; border-radius: 8px; color: white; transition: 0.2s; }
-        .btn:hover { opacity: 0.8; }
-        .btn-a { background-color: #3498db; }
-        .btn-b { background-color: #e74c3c; }
-        .scoreboard { margin-top: 30px; font-size: 24px; font-weight: bold; background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .score { margin: 10px 0; }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .poll-container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; transition: 0.2s; }
+        button:hover { background-color: #0056b3; transform: scale(1.05); }
+        .logout-btn { background-color: #dc3545; }
+        .admin-link-btn { background-color: #28a745; margin-right: 10px; }
+        .admin-link-btn:hover { background-color: #218838; }
+        #chart-container { width: 100%; max-width: 600px; margin: 30px auto; }
+        #message-box { margin-top: 15px; font-weight: bold; font-size: 1.1em; }
+        .admin-panel { margin-top: 30px; padding: 15px; border: 2px dashed #dc3545; border-radius: 8px; background-color: #fff8f8; }
+        .admin-panel input, .admin-panel select { padding: 8px; margin: 5px; font-size: 16px; }
+        .admin-btn { background-color: #dc3545; font-weight: bold; }
+        .admin-btn:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
 
-    <h1>LivePulse Voting</h1>
-    <p>Select your favorite candidate:</p>
+    <div class="header">
+        <h2>LivePulse v2.0</h2>
+        <div>
+            <span>Welcome, <b>{{ user.username }}</b> ({{ user.role }})</span>
+            {% if user.role == 'admin' %}
+                <a href="/admin"><button class="admin-link-btn">⚙️ Admin Dashboard</button></a>
+            {% endif %}
+            <a href="/logout"><button class="logout-btn">Logout</button></a>
+        </div>
+    </div>
 
-    <button class="btn btn-a" onclick="castVote('Candidate_A')">Vote for Candidate A</button>
-    <button class="btn btn-b" onclick="castVote('Candidate_B')">Vote for Candidate B</button>
+    <div class="poll-container">
+        {% if poll %}
+            <h3>📝 Active Poll: {{ poll.title }}</h3>
+            
+            <div id="voting-options">
+                {% for option in options %}
+                    <button onclick="castVote({{ poll.id }}, {{ option.id }}, '{{ option.option_name }}')">
+                        Vote for {{ option.option_name }}
+                    </button>
+                {% endfor %}
+            </div>
 
-    <div class="scoreboard">
-        <h2>Live Results 🔴</h2>
-        <div class="score">Candidate A: <span id="score-a">0</span></div>
-        <div class="score">Candidate B: <span id="score-b">0</span></div>
+            <div id="message-box"></div>
+            
+            {% if user.role == 'admin' %}
+            <div class="admin-panel">
+                <h4 style="color: #dc3545; margin-top: 0;">🛠️ Admin Traffic Simulator</h4>
+                <p style="font-size: 0.9em; margin-bottom: 15px;">Bypass MySQL constraints and inject load directly into Redis.</p>
+                <input type="number" id="sim-count" value="50" min="1" style="width: 80px;">
+                <select id="sim-option">
+                    {% for option in options %}
+                        <option value="{{ option.option_name }}">{{ option.option_name }}</option>
+                    {% endfor %}
+                </select>
+                <button class="admin-btn" onclick="simulateVotes({{ poll.id }})">Inject Fake Votes</button>
+            </div>
+            {% endif %}
+            
+            <div id="chart-container">
+                <canvas id="resultsChart"></canvas>
+            </div>
+            
+        {% else %}
+            <h3>No active polls at the moment.</h3>
+        {% endif %}
     </div>
 
     <script>
-        // NEW: Connect to the WebSocket server
-        const socket = io('http://127.0.0.1:5000');
+        const socket = io();
+        let liveChart;
 
-        // NEW: Broadcast the 'score_update' from Python
-        socket.on('score_update', function(allScores) {
-            // allScores looks like: { "Candidate_A": "5", "Candidate_B": "2" }
-            if(allScores.Candidate_A) document.getElementById('score-a').innerText = allScores.Candidate_A;
-            if(allScores.Candidate_B) document.getElementById('score-b').innerText = allScores.Candidate_B;
+        const colorPalette = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8'];
+        const colorMap = {};
+        {% for option in options %}
+            colorMap['{{ option.option_name }}'] = colorPalette[{{ loop.index0 }} % colorPalette.length];
+        {% endfor %}
+
+        function getSortedData(scoresObj) {
+            let entries = Object.keys(scoresObj).map(key => ({
+                label: key,
+                votes: Number(scoresObj[key])
+            }));
+            entries.sort((a, b) => a.votes - b.votes);
+            return {
+                labels: entries.map(e => e.label),
+                votes: entries.map(e => e.votes),
+                colors: entries.map(e => colorMap[e.label] || '#6c757d')
+            };
+        }
+
+        const initialScores = {{ initial_scores | tojson | safe }};
+        const sortedInitial = getSortedData(initialScores);
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('resultsChart').getContext('2d');
+            
+            liveChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedInitial.labels,
+                    datasets: [{
+                        label: 'Total Votes',
+                        data: sortedInitial.votes,
+                        backgroundColor: sortedInitial.colors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 5 } }
+                    },
+                    animation: { duration: 500, easing: 'easeOutQuart' }
+                }
+            });
         });
 
-        // The exact same vote function
-        async function castVote(candidateName) {
-            try {
-                await fetch('http://127.0.0.1:5000/api/vote', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ candidate: candidateName })
-                });
-                // The WebSocket will catch the update.
-            } catch (error) {
-                console.error("Error connecting to server:", error);
-            }
+        function castVote(pollId, optionId, optionName) {
+            fetch('/api/vote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poll_id: pollId, option_id: optionId, option_name: optionName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const msgBox = document.getElementById('message-box');
+                if (data.error) {
+                    msgBox.style.color = "#dc3545"; 
+                    msgBox.innerText = "❌ " + data.error;
+                } else {
+                    msgBox.style.color = "#28a745"; 
+                    msgBox.innerText = "✅ " + data.message;
+                }
+            });
         }
+
+        function simulateVotes(pollId) {
+            const count = document.getElementById('sim-count').value;
+            const optionName = document.getElementById('sim-option').value;
+
+            fetch('/api/admin/simulate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poll_id: pollId, option_name: optionName, count: count })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const msgBox = document.getElementById('message-box');
+                if (data.error) {
+                    msgBox.style.color = "#dc3545"; 
+                    msgBox.innerText = "❌ " + data.error;
+                } else {
+                    msgBox.style.color = "#ffc107"; 
+                    msgBox.innerText = "⚡ " + data.message;
+                }
+            });
+        }
+
+        socket.on('update_chart', function(data) {
+            if (liveChart) {
+                const sorted = getSortedData(data);
+                liveChart.data.labels = sorted.labels;
+                liveChart.data.datasets[0].data = sorted.votes;
+                liveChart.data.datasets[0].backgroundColor = sorted.colors;
+                liveChart.update(); 
+            }
+        });
     </script>
 </body>
 </html>
