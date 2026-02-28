@@ -64,6 +64,10 @@ def login():
         if user_data and user_data['password_hash'] == password:
             user = User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
             login_user(user)
+            
+            # Smart Routing: Send admins straight to their dashboard
+            if user.role == 'admin':
+                return redirect(url_for('admin_dashboard'))
             return redirect(url_for('index'))
         else:
             return "❌ Invalid username or password. Try again!", 401
@@ -76,14 +80,17 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# --- MAIN APP ROUTE ---
+# --- MAIN APP ROUTE (USER PORTAL) ---
 @app.route('/')
 @login_required
 def index():
+    # Smart Routing: Bounce admins away from the user site
+    if current_user.role == 'admin':
+        return redirect(url_for('admin_dashboard'))
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    # Fetch the most recently created active poll
     cursor.execute("SELECT * FROM polls WHERE is_active = TRUE ORDER BY id DESC LIMIT 1")
     poll = cursor.fetchone()
     
@@ -106,28 +113,6 @@ def index():
     return render_template('index.html', user=current_user, poll=poll, options=options, initial_scores=initial_scores)
 
 # --- VOTING API & SOCKETS ---
-@app.route('/api/admin/simulate', methods=['POST'])
-@login_required
-def simulate_votes():
-    if current_user.role != 'admin':
-        return jsonify({"error": "Unauthorized! Admins only."}), 403
-
-    data = request.json
-    poll_id = data.get('poll_id')
-    option_name = data.get('option_name')
-    
-    try:
-        vote_count = int(data.get('count', 1))
-    except ValueError:
-        return jsonify({"error": "Invalid number"}), 400
-
-    redis_client.hincrby(f"poll_{poll_id}_results", option_name, vote_count)
-    
-    all_scores = redis_client.hgetall(f"poll_{poll_id}_results")
-    socketio.emit('update_chart', all_scores)
-
-    return jsonify({"message": f"Injected {vote_count} fake votes for {option_name}!"}), 200
-
 @app.route('/api/vote', methods=['POST'])
 @login_required
 def vote():
@@ -164,7 +149,54 @@ def vote():
         cursor.close()
         conn.close()
 
-# --- ADMIN POLL CREATION ---
+# --- ADMIN API ENDPOINTS ---
+@app.route('/api/admin/simulate', methods=['POST'])
+@login_required
+def simulate_votes():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized! Admins only."}), 403
+
+    data = request.json
+    poll_id = data.get('poll_id')
+    option_name = data.get('option_name')
+    
+    try:
+        vote_count = int(data.get('count', 1))
+    except ValueError:
+        return jsonify({"error": "Invalid number"}), 400
+
+    redis_client.hincrby(f"poll_{poll_id}_results", option_name, vote_count)
+    
+    all_scores = redis_client.hgetall(f"poll_{poll_id}_results")
+    socketio.emit('update_chart', all_scores)
+
+    return jsonify({"message": f"Injected {vote_count} fake votes for {option_name}!"}), 200
+
+@app.route('/api/admin/end_poll', methods=['POST'])
+@login_required
+def end_poll():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized! Admins only."}), 403
+
+    poll_id = request.json.get('poll_id')
+    
+    if not poll_id:
+        return jsonify({"error": "Missing poll ID"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("UPDATE polls SET is_active = FALSE WHERE id = %s", (poll_id,))
+        conn.commit()
+        return jsonify({"message": "Poll ended successfully!"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --- ADMIN DASHBOARD & POLL CREATION ---
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
 def admin_dashboard():
@@ -195,7 +227,7 @@ def admin_dashboard():
                 )
             
             conn.commit()
-            return redirect(url_for('index'))
+            return redirect(url_for('admin_dashboard'))
 
         except Exception as e:
             return f"❌ Error: {str(e)}", 500
@@ -203,7 +235,35 @@ def admin_dashboard():
             cursor.close()
             conn.close()
 
-    return render_template('admin.html', user=current_user)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    def fetch_poll_details(query):
+        cursor.execute(query)
+        polls = cursor.fetchall()
+        
+        for poll in polls:
+            cursor.execute("SELECT * FROM poll_options WHERE poll_id = %s", (poll['id'],))
+            options = cursor.fetchall()
+            poll['options'] = options
+            
+            raw_scores = redis_client.hgetall(f"poll_{poll['id']}_results")
+            scores = {}
+            for opt in options:
+                name = opt['option_name']
+                scores[name] = int(raw_scores.get(name, 0))
+            poll['scores'] = scores
+            
+        return polls
+
+    try:
+        active_polls = fetch_poll_details("SELECT * FROM polls WHERE is_active = TRUE ORDER BY created_at DESC")
+        ended_polls = fetch_poll_details("SELECT * FROM polls WHERE is_active = FALSE ORDER BY created_at DESC")
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template('admin.html', user=current_user, active_polls=active_polls, ended_polls=ended_polls)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)

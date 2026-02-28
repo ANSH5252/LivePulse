@@ -3,47 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LivePulse - Create Poll</title>
+    <title>LivePulse - Admin Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; display: flex; justify-content: center; }
-        .admin-container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
-        h2 { color: #dc3545; margin-top: 0; }
-        label { font-weight: bold; display: block; margin-top: 15px; }
-        input[type="text"] { width: 90%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; margin: 0; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto; }
+        .btn-logout { background-color: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        /* Buttons & Accordions */
+        /* NEW: Distinct Purple color for the Create button, moved to bottom */
+        .btn-create { background-color: #6f42c1; color: white; padding: 12px 20px; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; display: block; width: 100%; margin-top: 25px; transition: 0.3s; }
+        .btn-create:hover { background-color: #59339d; }
+        
+        .accordion { background-color: #343a40; color: white; cursor: pointer; padding: 15px; width: 100%; text-align: left; border: none; outline: none; transition: 0.4s; font-size: 18px; border-radius: 5px; margin-bottom: 5px; font-weight: bold; }
+        .accordion.ongoing { background-color: #28a745; }
+        .accordion.ended { background-color: #6c757d; }
+        .active, .accordion:hover { filter: brightness(1.1); }
+        .panel { padding: 0 15px; background-color: #fafafa; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; border-radius: 0 0 5px 5px; margin-bottom: 15px; }
+        
+        /* Poll Lists */
+        .poll-list-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #ddd; }
+        .poll-list-item:last-child { border-bottom: none; }
+        .btn-view { background-color: #17a2b8; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        
+        /* Modals & Detail Views */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 10% auto; padding: 20px; border-radius: 8px; width: 90%; max-width: 500px; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-btn:hover { color: black; }
+        
+        #detail-view { display: none; }
+        .btn-back { background-color: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+        .btn-end-poll { background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-left: 10px; }
+        .admin-panel { padding: 15px; border: 2px dashed #dc3545; border-radius: 8px; background-color: #fff8f8; margin-bottom: 20px; }
+        .chart-container { position: relative; height: 400px; width: 100%; }
+        
+        /* Form Inputs */
+        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         .option-group { margin-bottom: 10px; }
-        button { padding: 10px 15px; margin-top: 15px; cursor: pointer; border: none; border-radius: 4px; font-size: 16px; width: 100%; transition: 0.2s; }
-        .add-btn { background-color: #17a2b8; color: white; margin-bottom: 20px; }
-        .add-btn:hover { background-color: #138496; }
-        .submit-btn { background-color: #28a745; color: white; font-weight: bold; font-size: 18px; }
-        .submit-btn:hover { background-color: #218838; }
-        .back-link { display: block; text-align: center; margin-top: 15px; color: #007bff; text-decoration: none; }
+        .add-btn { background-color: #17a2b8; color: white; margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .submit-btn { background-color: #28a745; color: white; font-weight: bold; width: 100%; margin-top: 15px; padding: 12px; border: none; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div class="admin-container">
-        <h2>🛠️ Create a New Poll</h2>
-        <form action="/admin" method="POST">
-            
-            <label>Poll Question:</label>
-            <input type="text" name="title" placeholder="e.g., Who is the best superhero?" required>
+    <div class="header">
+        <h2 style="margin: 0; color: #dc3545;">⚙️ LivePulse Admin Central</h2>
+        <div>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+    </div>
 
-            <label>Voting Options:</label>
-            <div id="options-container">
-                <div class="option-group"><input type="text" name="options[]" placeholder="Option 1" required></div>
-                <div class="option-group"><input type="text" name="options[]" placeholder="Option 2" required></div>
+    <div class="container">
+        <div id="dashboard-view">
+            
+            <button class="accordion ongoing">🟢 Ongoing Active Polls</button>
+            <div class="panel">
+                {% if active_polls %}
+                    {% for poll in active_polls %}
+                        <div class="poll-list-item">
+                            <strong style="font-size: 1.1em;">{{ poll.title }}</strong>
+                            <button class="btn-view" onclick="openDetailView({{ poll.id }})">View Details ➔</button>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="padding: 15px;">No active polls currently running.</p>
+                {% endif %}
             </div>
 
-            <button type="button" class="add-btn" onclick="addOption()">➕ Add Another Option</button>
+            <button class="accordion ended">🗄️ Ended / Archived Polls</button>
+            <div class="panel">
+                {% if ended_polls %}
+                    {% for poll in ended_polls %}
+                        <div class="poll-list-item">
+                            <span style="color: #555;">{{ poll.title }}</span>
+                            <button class="btn-view" style="background-color: #6c757d;" onclick="openDetailView({{ poll.id }})">View Results ➔</button>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="padding: 15px;">No archived polls found.</p>
+                {% endif %}
+            </div>
 
-            <button type="submit" class="submit-btn">🚀 Launch Poll</button>
-        </form>
-        <a href="/" class="back-link">← Back to Dashboard</a>
+            <button class="btn-create" onclick="openModal()">➕ Create New Poll</button>
+            
+        </div>
+
+        <div id="detail-view">
+            <button class="btn-back" onclick="closeDetailView()">← Back to Dashboard</button>
+            <button class="btn-end-poll" id="btn-end-poll" style="display: none;">🛑 End This Poll</button>
+            
+            <h2 id="detail-title" style="margin-top: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;"></h2>
+
+            <div class="admin-panel" id="detail-simulator" style="display: none;">
+                <h4 style="color: #dc3545; margin-top: 0;">🛠️ Traffic Simulator (Admin Only)</h4>
+                <input type="number" id="sim-count" value="25" min="1" style="width: 70px; padding: 8px;">
+                <select id="sim-option" style="padding: 8px; margin-right: 10px;"></select>
+                <button style="background-color: #dc3545; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer;" onclick="simulateVotes()">Inject Fake Votes</button>
+                <span id="sim-msg" style="margin-left: 10px; font-weight: bold; color: #28a745;"></span>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="detailChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>📝 Launch New Poll</h2>
+            <p style="font-size: 0.9em; color: #666;">Launching a new poll automatically archives the currently active one.</p>
+            <form action="/admin" method="POST">
+                <label>Poll Question:</label>
+                <input type="text" name="title" placeholder="e.g., Best Programming Language?" required>
+
+                <label>Voting Options:</label>
+                <div id="options-container">
+                    <div class="option-group"><input type="text" name="options[]" placeholder="Option 1" required></div>
+                    <div class="option-group"><input type="text" name="options[]" placeholder="Option 2" required></div>
+                </div>
+
+                <button type="button" class="add-btn" onclick="addOption()">➕ Add Option</button>
+                <button type="submit" class="submit-btn">🚀 Launch Poll to Users</button>
+            </form>
+        </div>
     </div>
 
     <script>
+        function openModal() { document.getElementById('createModal').style.display = 'block'; }
+        function closeModal() { document.getElementById('createModal').style.display = 'none'; }
+        window.onclick = function(event) { if (event.target == document.getElementById('createModal')) closeModal(); }
+
         let optionCount = 2;
-        // Simple JS function to dynamically add new text inputs to the form
         function addOption() {
             optionCount++;
             const container = document.getElementById('options-container');
@@ -52,7 +146,134 @@
             newDiv.innerHTML = `<input type="text" name="options[]" placeholder="Option ${optionCount}" required>`;
             container.appendChild(newDiv);
         }
-    </script>
 
+        var acc = document.getElementsByClassName("accordion");
+        for (var i = 0; i < acc.length; i++) {
+            acc[i].addEventListener("click", function() {
+                this.classList.toggle("active");
+                var panel = this.nextElementSibling;
+                if (panel.style.maxHeight) { panel.style.maxHeight = null; } 
+                else { panel.style.maxHeight = panel.scrollHeight + "px"; } 
+            });
+        }
+        if(acc.length > 0) { acc[0].click(); acc[1].click(); }
+
+        const activePolls = {{ active_polls | tojson | safe if active_polls else '[]' }};
+        const endedPolls = {{ ended_polls | tojson | safe if ended_polls else '[]' }};
+        
+        const allPollsMap = {};
+        activePolls.forEach(p => { p.isActive = true; allPollsMap[p.id] = p; });
+        endedPolls.forEach(p => { p.isActive = false; allPollsMap[p.id] = p; });
+
+        let currentChart = null;
+        let currentlyViewedPollId = null;
+        const colorPalette = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14'];
+
+        function getSortedData(scoresObj, optionsArray) {
+            const colorMap = {};
+            optionsArray.forEach((opt, index) => { colorMap[opt.option_name] = colorPalette[index % colorPalette.length]; });
+            let entries = Object.keys(scoresObj).map(key => ({ label: key, votes: Number(scoresObj[key]) }));
+            entries.sort((a, b) => a.votes - b.votes); 
+            return {
+                labels: entries.map(e => e.label),
+                votes: entries.map(e => e.votes),
+                colors: entries.map(e => colorMap[e.label] || '#6c757d')
+            };
+        }
+
+        function openDetailView(pollId) {
+            const poll = allPollsMap[pollId];
+            currentlyViewedPollId = pollId;
+
+            document.getElementById('dashboard-view').style.display = 'none';
+            document.getElementById('detail-view').style.display = 'block';
+            document.getElementById('detail-title').innerText = poll.title + (poll.isActive ? " (Live)" : " (Ended)");
+
+            const simPanel = document.getElementById('detail-simulator');
+            const endBtn = document.getElementById('btn-end-poll');
+            const simSelect = document.getElementById('sim-option');
+            
+            if (poll.isActive) {
+                simPanel.style.display = 'block';
+                endBtn.style.display = 'inline-block';
+                endBtn.onclick = () => endActivePoll(poll.id);
+                
+                simSelect.innerHTML = '';
+                poll.options.forEach(opt => {
+                    simSelect.innerHTML += `<option value="${opt.option_name}">${opt.option_name}</option>`;
+                });
+            } else {
+                simPanel.style.display = 'none';
+                endBtn.style.display = 'none';
+            }
+
+            if (currentChart) { currentChart.destroy(); }
+            const ctx = document.getElementById('detailChart').getContext('2d');
+            const sortedData = getSortedData(poll.scores, poll.options);
+
+            currentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedData.labels,
+                    datasets: [{ label: 'Total Votes', data: sortedData.votes, backgroundColor: sortedData.colors, borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 5 } } },
+                    animation: { duration: 500, easing: 'easeOutQuart' }
+                }
+            });
+        }
+
+        function closeDetailView() {
+            document.getElementById('detail-view').style.display = 'none';
+            document.getElementById('dashboard-view').style.display = 'block';
+            currentlyViewedPollId = null;
+        }
+
+        function simulateVotes() {
+            const count = document.getElementById('sim-count').value;
+            const optionName = document.getElementById('sim-option').value;
+
+            fetch('/api/admin/simulate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poll_id: currentlyViewedPollId, option_name: optionName, count: count })
+            })
+            .then(res => res.json())
+            .then(data => {
+                const msgBox = document.getElementById('sim-msg');
+                msgBox.innerText = data.error ? "❌ " + data.error : "⚡ Sent!";
+                setTimeout(() => msgBox.innerText = "", 3000); 
+            });
+        }
+
+        function endActivePoll(pollId) {
+            if (confirm("Are you sure you want to end this poll? Users will no longer be able to vote.")) {
+                fetch('/api/admin/end_poll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ poll_id: pollId })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(!data.error) location.reload(); 
+                    else alert(data.error);
+                });
+            }
+        }
+
+        const socket = io();
+        socket.on('update_chart', function(data) {
+            if (currentlyViewedPollId && allPollsMap[currentlyViewedPollId].isActive && currentChart) {
+                const poll = allPollsMap[currentlyViewedPollId];
+                const sorted = getSortedData(data, poll.options);
+                currentChart.data.labels = sorted.labels;
+                currentChart.data.datasets[0].data = sorted.votes;
+                currentChart.data.datasets[0].backgroundColor = sorted.colors;
+                currentChart.update();
+            }
+        });
+    </script>
 </body>
 </html>
