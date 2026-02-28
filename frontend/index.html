@@ -3,155 +3,285 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LivePulse - Dashboard</title>
+    <title>LivePulse - Voter Portal</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .poll-container { background: white; padding: 20px; margin-top: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
-        button { padding: 10px 15px; margin: 5px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; transition: 0.2s; }
-        button:hover { background-color: #0056b3; transform: scale(1.05); }
-        .logout-btn { background-color: #dc3545; }
-        #chart-container { width: 100%; max-width: 600px; margin: 30px auto; }
-        #message-box { margin-top: 15px; font-weight: bold; font-size: 1.1em; }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; margin: 0; }
+        
+        /* Top Navbar */
+        .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-width: 900px; margin: 0 auto 20px auto; position: relative; }
+        
+        /* Persistent Ticket Banner */
+        .ticket-banner { background: linear-gradient(135deg, #4e54c8, #8f94fb); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; max-width: 900px; margin: 0 auto 20px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: left; }
+        .ticket-info h3 { margin-top: 0; font-size: 1.5em; }
+        .user-badge { background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; display: inline-block; font-family: monospace; font-size: 1.1em; border: 1px solid rgba(255,255,255,0.3); }
+        #qrcode-container { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+        /* Main Content Container */
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; }
+        
+        /* Notifications */
+        .bell-icon { font-size: 24px; cursor: pointer; position: relative; margin-right: 15px; }
+        .badge { background: #dc3545; color: white; border-radius: 50%; padding: 2px 6px; font-size: 12px; font-weight: bold; position: absolute; top: -5px; right: -10px; display: none; }
+        #notification-dropdown { display: none; position: absolute; top: 60px; right: 20px; background: white; border: 1px solid #ccc; width: 320px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); border-radius: 8px; z-index: 1000; padding: 10px; text-align: left; }
+        .notification-item { border-bottom: 1px solid #eee; padding: 10px 0; font-size: 0.9em; }
+        .notification-item:last-child { border-bottom: none; }
+        .copy-btn { background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; float: right; }
+        
+        /* Section Hiding */
+        .spa-section { display: none; }
+        .active-section { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Form Elements */
+        .pin-input { font-size: 24px; letter-spacing: 5px; text-align: center; padding: 15px; width: 60%; max-width: 300px; margin: 20px 0; border: 2px solid #6f42c1; border-radius: 8px; font-weight: bold; text-transform: uppercase; }
+        .btn-primary { background-color: #6f42c1; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-primary:hover { background-color: #59339d; }
+        
+        /* Voting Buttons */
+        .vote-btn { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 5px; font-size: 16px; margin: 10px; cursor: pointer; transition: 0.3s; flex: 1; min-width: 150px; font-weight: bold; }
+        .vote-btn:hover { background-color: #0056b3; transform: scale(1.05); }
+        .options-container { display: flex; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+        .chart-container { position: relative; height: 350px; width: 100%; margin-top: 30px; }
+
+        /* Custom Modal */
+        .modal-overlay { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
+        .modal-box { background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2>LivePulse v2.0</h2>
-        <div>
-            <span>Welcome, <b>{{ user.username }}</b></span>
-            <a href="/logout"><button class="logout-btn">Logout</button></a>
+        <h2 style="margin: 0; color: #6f42c1;">⚡ LivePulse Voting</h2>
+        <div style="display: flex; align-items: center;">
+            <div class="bell-icon" onclick="toggleNotifications()">
+                🔔 <span class="badge" id="notif-badge">0</span>
+            </div>
+            <a href="/logout" style="background:#dc3545; color:white; padding:8px 15px; border-radius:4px; text-decoration:none; font-weight:bold;">Logout</a>
+        </div>
+        
+        <div id="notification-dropdown">
+            <h4 style="margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Inbox</h4>
+            <div id="notif-list">
+                <p style="color: #777; font-size: 0.9em; text-align: center;">No new notifications</p>
+            </div>
         </div>
     </div>
 
-    <div class="poll-container" style="display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); color: white; text-align: left;">
-        <div>
-            <h3 style="margin-top: 0;">🎟️ Your Official Event Ticket</h3>
-            <p>Show this QR code to the Admin at the door to check in.<br>Once scanned, you will receive your voting PIN.</p>
-            <p style="font-family: monospace; font-size: 1.2em; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; display: inline-block;">User ID: LIVEPULSE-{{ user.id }}</p>
+    <div class="ticket-banner">
+        <div class="ticket-info">
+            <h3>🎟️ Your Official Event Ticket</h3>
+            <p style="margin-bottom: 15px; line-height: 1.4;">Show this QR code to the Admin at the door to check in.<br>Once scanned, you will receive your voting PIN via the Notification Bell.</p>
+            <div class="user-badge">User ID: LIVEPULSE_{{ user.id }}</div>
         </div>
-        <div style="background: white; padding: 10px; border-radius: 8px;">
-            <div id="qrcode"></div>
-        </div>
+        <div id="qrcode-container"></div>
     </div>
 
-    <div class="poll-container">
-        {% if poll %}
-            <h3>📝 Active Poll: {{ poll.title }}</h3>
-            
-            <div id="voting-options">
-                {% for option in options %}
-                    <button onclick="castVote({{ poll.id }}, {{ option.id }}, '{{ option.option_name }}')">
-                        Vote for {{ option.option_name }}
-                    </button>
-                {% endfor %}
-            </div>
-
-            <div id="message-box"></div>
-            
-            <div id="chart-container">
-                <canvas id="resultsChart"></canvas>
-            </div>
-            
+    <div class="container">
+        {% if not poll %}
+            <h3 style="color: #6c757d;">No Active Events</h3>
+            <p>Waiting for the administrator to launch the next poll...</p>
         {% else %}
-            <h3>No active polls at the moment.</h3>
+            
+            <div id="section-waiting" class="spa-section">
+                <h2 style="color: #6c757d;">⏳ Waiting for Check-in...</h2>
+                <p>Please present your ticket above to the administrator to unlock the security gate.</p>
+            </div>
+
+            <div id="section-pin" class="spa-section">
+                <h2 style="color: #6f42c1;">🔒 Security Gate</h2>
+                <p>You have successfully checked in for: <strong>{{ poll.title }}</strong></p>
+                <p style="color: #dc3545; font-size: 0.9em; font-weight: bold;">Check your Notification Bell (🔔) for your secure 7-digit PIN.</p>
+                
+                <input type="text" id="token-input" class="pin-input" placeholder="Enter PIN" maxlength="7">
+                <br>
+                <button class="btn-primary" onclick="verifyToken()">Unlock Voting ➔</button>
+                <p id="pin-error" style="color: red; font-weight: bold; display: none; margin-top: 15px;"></p>
+            </div>
+
+            <div id="section-vote" class="spa-section">
+                <h2 style="color: #333;">{{ poll.title }}</h2>
+                <p style="color: #28a745; font-weight: bold;">🔓 Voting Unlocked</p>
+                
+                {% if has_voted %}
+                    <div style="background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; border: 1px solid #c3e6cb;">
+                        ✅ Your secure vote has been recorded!
+                    </div>
+                {% else %}
+                    <div id="voting-controls" class="options-container">
+                        {% for opt in options %}
+                            <button class="vote-btn" onclick="castVote({{ opt.id }}, '{{ opt.option_name }}')">
+                                Vote for {{ opt.option_name }}
+                            </button>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="chart-container">
+                    <canvas id="liveChart"></canvas>
+                </div>
+            </div>
+
         {% endif %}
     </div>
 
+    <div id="scan-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h1 style="font-size: 40px; margin: 0;">🎉</h1>
+            <h2 style="color: #28a745;">Check-In Complete!</h2>
+            <p>You are now authorized to participate in: <br><strong id="modal-poll-name"></strong></p>
+            <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="proceedToPin()">Continue</button>
+        </div>
+    </div>
+
     <script>
-        // Generate the QR Code dynamically on load
-        document.addEventListener('DOMContentLoaded', function () {
-            const qrString = "LIVEPULSE_USER_{{ user.id }}";
-            new QRCode(document.getElementById("qrcode"), { 
-                text: qrString, 
-                width: 128, 
-                height: 128 
-            });
+        // --- ALWAYS RENDER THE QR CODE ---
+        new QRCode(document.getElementById("qrcode-container"), {
+            text: "LIVEPULSE_USER_{{ user.id }}",
+            width: 120, height: 120,
+            colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
         });
 
+        // --- SOCKET CONNECTION & ROOM JOINING ---
         const socket = io();
-        let liveChart;
+        socket.on('connect', () => {
+            socket.emit('join', { user_id: {{ user.id if user else 'null' }} });
+        });
 
-        const colorPalette = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8'];
-        const colorMap = {};
-        {% for option in options %}
-            colorMap['{{ option.option_name }}'] = colorPalette[{{ loop.index0 }} % colorPalette.length];
-        {% endfor %}
-
-        function getSortedData(scoresObj) {
-            let entries = Object.keys(scoresObj).map(key => ({
-                label: key,
-                votes: Number(scoresObj[key])
-            }));
-            entries.sort((a, b) => a.votes - b.votes);
-            return {
-                labels: entries.map(e => e.label),
-                votes: entries.map(e => e.votes),
-                colors: entries.map(e => colorMap[e.label] || '#6c757d')
-            };
-        }
-
-        const initialScores = {{ initial_scores | tojson | safe }};
-        const sortedInitial = getSortedData(initialScores);
-
-        document.addEventListener('DOMContentLoaded', function () {
-            const ctx = document.getElementById('resultsChart').getContext('2d');
+        {% if poll %}
+            const pollId = {{ poll.id }};
             
-            liveChart = new Chart(ctx, {
+            // --- SPA STATE MANAGER ---
+            const isPresent = {{ 'true' if is_present else 'false' }};
+            const hasVerified = {{ 'true' if has_verified else 'false' }};
+            
+            function showSection(sectionId) {
+                document.querySelectorAll('.spa-section').forEach(el => el.classList.remove('active-section'));
+                document.getElementById(sectionId).classList.add('active-section');
+            }
+
+            if (hasVerified) {
+                showSection('section-vote');
+            } else if (isPresent) {
+                showSection('section-pin');
+            } else {
+                showSection('section-waiting');
+            }
+
+            // --- REAL-TIME POP-UP TRIGGER ---
+            socket.on('scan_success', (data) => {
+                document.getElementById('modal-poll-name').innerText = data.poll_name;
+                document.getElementById('scan-modal').style.display = 'flex';
+            });
+
+            function proceedToPin() {
+                document.getElementById('scan-modal').style.display = 'none';
+                showSection('section-pin');
+            }
+
+            // --- NOTIFICATION CENTER & MASKING LOGIC ---
+            let unreadCount = 0;
+            const notifList = document.getElementById('notif-list');
+            
+            socket.on('new_notification', (data) => {
+                unreadCount++;
+                document.getElementById('notif-badge').innerText = unreadCount;
+                document.getElementById('notif-badge').style.display = 'block';
+
+                if(unreadCount === 1) notifList.innerHTML = ''; 
+
+                const item = document.createElement('div');
+                item.className = 'notification-item';
+                item.innerHTML = `
+                    <strong>${data.poll_name}</strong><br>
+                    Your Voting PIN: <span style="font-family: monospace; font-size: 1.1em; color: #6f42c1;">*******</span>
+                    <button class="copy-btn" onclick="copyToClipboard('${data.token}', this)">Copy PIN</button>
+                `;
+                notifList.prepend(item);
+            });
+
+            function toggleNotifications() {
+                const drop = document.getElementById('notification-dropdown');
+                drop.style.display = drop.style.display === 'block' ? 'none' : 'block';
+                if (drop.style.display === 'block') {
+                    unreadCount = 0;
+                    document.getElementById('notif-badge').style.display = 'none';
+                }
+            }
+
+            function copyToClipboard(realToken, btnElement) {
+                navigator.clipboard.writeText(realToken).then(() => {
+                    const originalText = btnElement.innerText;
+                    btnElement.innerText = "Copied!";
+                    btnElement.style.background = "#28a745";
+                    setTimeout(() => {
+                        btnElement.innerText = originalText;
+                        btnElement.style.background = "#17a2b8";
+                    }, 2000);
+                });
+            }
+
+            // --- TOKEN VERIFICATION ---
+            function verifyToken() {
+                const tokenInput = document.getElementById('token-input').value.trim().toUpperCase();
+                const errBox = document.getElementById('pin-error');
+                
+                if (tokenInput.length !== 7) {
+                    errBox.innerText = "PIN must be exactly 7 characters.";
+                    errBox.style.display = 'block';
+                    return;
+                }
+
+                fetch('/api/verify_token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ poll_id: pollId, token: tokenInput })
+                }).then(res => res.json()).then(data => {
+                    if (data.error) {
+                        errBox.innerText = "❌ " + data.error;
+                        errBox.style.display = 'block';
+                    } else {
+                        errBox.style.display = 'none';
+                        showSection('section-vote');
+                    }
+                });
+            }
+
+            // --- VOTING & LIVE CHART ---
+            function castVote(optId, optName) {
+                fetch('/api/vote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ poll_id: pollId, option_id: optId, option_name: optName })
+                }).then(res => res.json()).then(data => {
+                    if (data.error) { alert("❌ " + data.error); } 
+                    else { location.reload(); }
+                });
+            }
+
+            const initialScores = {{ initial_scores | tojson | safe }};
+            const labels = Object.keys(initialScores);
+            const dataPts = Object.values(initialScores);
+            const colorPalette = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14'];
+            const bgColors = labels.map((_, i) => colorPalette[i % colorPalette.length]);
+
+            const ctx = document.getElementById('liveChart').getContext('2d');
+            const myChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: sortedInitial.labels,
-                    datasets: [{
-                        label: 'Total Votes',
-                        data: sortedInitial.votes,
-                        backgroundColor: sortedInitial.colors,
-                        borderWidth: 1
-                    }]
+                    labels: labels,
+                    datasets: [{ label: 'Live Votes', data: dataPts, backgroundColor: bgColors }]
                 },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 5 } }
-                    },
-                    animation: { duration: 500, easing: 'easeOutQuart' }
-                }
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
-        });
 
-        function castVote(pollId, optionId, optionName) {
-            fetch('/api/vote', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ poll_id: pollId, option_id: optionId, option_name: optionName })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const msgBox = document.getElementById('message-box');
-                if (data.error) {
-                    msgBox.style.color = "#dc3545"; 
-                    msgBox.innerText = "❌ " + data.error;
-                } else {
-                    msgBox.style.color = "#28a745"; 
-                    msgBox.innerText = "✅ " + data.message;
-                }
+            socket.on('update_chart', (data) => {
+                myChart.data.datasets[0].data = myChart.data.labels.map(l => data[l] || 0);
+                myChart.update();
             });
-        }
-
-        socket.on('update_chart', function(data) {
-            if (liveChart) {
-                const sorted = getSortedData(data);
-                liveChart.data.labels = sorted.labels;
-                liveChart.data.datasets[0].data = sorted.votes;
-                liveChart.data.datasets[0].backgroundColor = sorted.colors;
-                liveChart.update(); 
-            }
-        });
+        {% endif %}
     </script>
 </body>
 </html>
