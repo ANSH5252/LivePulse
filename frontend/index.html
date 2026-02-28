@@ -6,6 +6,9 @@
     <title>LivePulse - Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
         .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -13,14 +16,8 @@
         button { padding: 10px 15px; margin: 5px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; transition: 0.2s; }
         button:hover { background-color: #0056b3; transform: scale(1.05); }
         .logout-btn { background-color: #dc3545; }
-        .admin-link-btn { background-color: #28a745; margin-right: 10px; }
-        .admin-link-btn:hover { background-color: #218838; }
         #chart-container { width: 100%; max-width: 600px; margin: 30px auto; }
         #message-box { margin-top: 15px; font-weight: bold; font-size: 1.1em; }
-        .admin-panel { margin-top: 30px; padding: 15px; border: 2px dashed #dc3545; border-radius: 8px; background-color: #fff8f8; }
-        .admin-panel input, .admin-panel select { padding: 8px; margin: 5px; font-size: 16px; }
-        .admin-btn { background-color: #dc3545; font-weight: bold; }
-        .admin-btn:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
@@ -28,11 +25,19 @@
     <div class="header">
         <h2>LivePulse v2.0</h2>
         <div>
-            <span>Welcome, <b>{{ user.username }}</b> ({{ user.role }})</span>
-            {% if user.role == 'admin' %}
-                <a href="/admin"><button class="admin-link-btn">⚙️ Admin Dashboard</button></a>
-            {% endif %}
+            <span>Welcome, <b>{{ user.username }}</b></span>
             <a href="/logout"><button class="logout-btn">Logout</button></a>
+        </div>
+    </div>
+
+    <div class="poll-container" style="display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); color: white; text-align: left;">
+        <div>
+            <h3 style="margin-top: 0;">🎟️ Your Official Event Ticket</h3>
+            <p>Show this QR code to the Admin at the door to check in.<br>Once scanned, you will receive your voting PIN.</p>
+            <p style="font-family: monospace; font-size: 1.2em; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; display: inline-block;">User ID: LIVEPULSE-{{ user.id }}</p>
+        </div>
+        <div style="background: white; padding: 10px; border-radius: 8px;">
+            <div id="qrcode"></div>
         </div>
     </div>
 
@@ -50,20 +55,6 @@
 
             <div id="message-box"></div>
             
-            {% if user.role == 'admin' %}
-            <div class="admin-panel">
-                <h4 style="color: #dc3545; margin-top: 0;">🛠️ Admin Traffic Simulator</h4>
-                <p style="font-size: 0.9em; margin-bottom: 15px;">Bypass MySQL constraints and inject load directly into Redis.</p>
-                <input type="number" id="sim-count" value="50" min="1" style="width: 80px;">
-                <select id="sim-option">
-                    {% for option in options %}
-                        <option value="{{ option.option_name }}">{{ option.option_name }}</option>
-                    {% endfor %}
-                </select>
-                <button class="admin-btn" onclick="simulateVotes({{ poll.id }})">Inject Fake Votes</button>
-            </div>
-            {% endif %}
-            
             <div id="chart-container">
                 <canvas id="resultsChart"></canvas>
             </div>
@@ -74,6 +65,16 @@
     </div>
 
     <script>
+        // Generate the QR Code dynamically on load
+        document.addEventListener('DOMContentLoaded', function () {
+            const qrString = "LIVEPULSE_USER_{{ user.id }}";
+            new QRCode(document.getElementById("qrcode"), { 
+                text: qrString, 
+                width: 128, 
+                height: 128 
+            });
+        });
+
         const socket = io();
         let liveChart;
 
@@ -138,28 +139,6 @@
                 } else {
                     msgBox.style.color = "#28a745"; 
                     msgBox.innerText = "✅ " + data.message;
-                }
-            });
-        }
-
-        function simulateVotes(pollId) {
-            const count = document.getElementById('sim-count').value;
-            const optionName = document.getElementById('sim-option').value;
-
-            fetch('/api/admin/simulate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ poll_id: pollId, option_name: optionName, count: count })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const msgBox = document.getElementById('message-box');
-                if (data.error) {
-                    msgBox.style.color = "#dc3545"; 
-                    msgBox.innerText = "❌ " + data.error;
-                } else {
-                    msgBox.style.color = "#ffc107"; 
-                    msgBox.innerText = "⚡ " + data.message;
                 }
             });
         }
