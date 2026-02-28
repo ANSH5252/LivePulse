@@ -3,25 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LivePulse - Login</title>
+    <title>LivePulse - Portal Access</title>
     <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; }
-        .login-box { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; text-align: center; }
-        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
-        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; margin: 0; }
+        .login-container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; text-align: center; }
+        .portal-toggle { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .toggle-btn { flex: 1; padding: 10px; cursor: pointer; border: none; background: none; font-size: 16px; font-weight: bold; color: #888; transition: 0.3s; }
+        .toggle-btn.active { color: #007bff; border-bottom: 3px solid #007bff; }
+        
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button[type="submit"] { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
+        button[type="submit"]:hover { background-color: #0056b3; }
+        
+        #admin-badge { display: none; color: #dc3545; font-size: 0.9em; margin-bottom: 10px; }
+        .admin-active button[type="submit"] { background-color: #dc3545; }
+        .admin-active button[type="submit"]:hover { background-color: #c82333; }
+        .admin-active .toggle-btn.active { color: #dc3545; border-bottom: 3px solid #dc3545; }
     </style>
 </head>
 <body>
 
-    <div class="login-box">
-        <h2>Welcome to LivePulse</h2>
+    <div class="login-container" id="login-box">
+        <h2 style="margin-top: 0;">LivePulse Access</h2>
+        
+        <div class="portal-toggle">
+            <button class="toggle-btn active" id="btn-user" onclick="switchPortal('user')">User Portal</button>
+            <button class="toggle-btn" id="btn-admin" onclick="switchPortal('admin')">Admin Portal</button>
+        </div>
+
+        <div id="admin-badge">🔒 Secure Admin Access Required</div>
+
         <form action="/login" method="POST">
             <input type="text" name="username" placeholder="Username" required>
             <input type="password" name="password" placeholder="Password" required>
-            <button type="submit">Log In</button>
+            <button type="submit" id="submit-btn">Login as User</button>
         </form>
     </div>
+
+    <script>
+        // Simple script to swap the UI colors and text based on the portal selected
+        function switchPortal(type) {
+            const box = document.getElementById('login-box');
+            const btnUser = document.getElementById('btn-user');
+            const btnAdmin = document.getElementById('btn-admin');
+            const submitBtn = document.getElementById('submit-btn');
+            const badge = document.getElementById('admin-badge');
+
+            if (type === 'admin') {
+                box.classList.add('admin-active');
+                btnAdmin.classList.add('active');
+                btnUser.classList.remove('active');
+                submitBtn.innerText = "Login as Admin";
+                badge.style.display = "block";
+            } else {
+                box.classList.remove('admin-active');
+                btnUser.classList.add('active');
+                btnAdmin.classList.remove('active');
+                submitBtn.innerText = "Login as User";
+                badge.style.display = "none";
+            }
+        }
+    </script>
 
 </body>
 </html>
