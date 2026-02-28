@@ -19,6 +19,8 @@
         .admin-active button[type="submit"] { background-color: #dc3545; }
         .admin-active button[type="submit"]:hover { background-color: #c82333; }
         .admin-active .toggle-btn.active { color: #dc3545; border-bottom: 3px solid #dc3545; }
+        .link { display: block; margin-top: 15px; color: #007bff; text-decoration: none; font-size: 0.9em; }
+        .link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -38,10 +40,11 @@
             <input type="password" name="password" placeholder="Password" required>
             <button type="submit" id="submit-btn">Login as User</button>
         </form>
+        
+        <a href="/register" class="link">Don't have an account? Register here.</a>
     </div>
 
     <script>
-        // Simple script to swap the UI colors and text based on the portal selected
         function switchPortal(type) {
             const box = document.getElementById('login-box');
             const btnUser = document.getElementById('btn-user');

@@ -6,7 +6,6 @@ from flask_socketio import SocketIO
 from dotenv import load_dotenv, find_dotenv
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-# --- SETUP & INITIALIZATION ---
 load_dotenv(find_dotenv())
 
 app = Flask(__name__, template_folder="../frontend", static_folder="../frontend")
@@ -27,7 +26,6 @@ def get_db_connection():
         database=os.getenv("MYSQL_DB")
     )
 
-# --- FLASK-LOGIN SETUP ---
 class User(UserMixin):
     def __init__(self, id, username, role):
         self.id = id
@@ -48,6 +46,42 @@ def load_user(user_id):
     return None
 
 # --- AUTHENTICATION ROUTES ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, 'user')",
+                (username, email, password)
+            )
+            conn.commit()
+            
+            new_user_id = cursor.lastrowid
+            user = User(id=new_user_id, username=username, role='user')
+            login_user(user)
+            
+            return redirect(url_for('index'))
+            
+        except mysql.connector.IntegrityError:
+            return "❌ That username or email is already taken!", 400
+        except Exception as e:
+            return f"❌ Error: {str(e)}", 500
+        finally:
+            cursor.close()
+            conn.close()
+
+    return render_template('register.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -65,7 +99,6 @@ def login():
             user = User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
             login_user(user)
             
-            # Smart Routing: Send admins straight to their dashboard
             if user.role == 'admin':
                 return redirect(url_for('admin_dashboard'))
             return redirect(url_for('index'))
@@ -80,11 +113,10 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# --- MAIN APP ROUTE (USER PORTAL) ---
+# --- MAIN APP ROUTE (USER DASHBOARD) ---
 @app.route('/')
 @login_required
 def index():
-    # Smart Routing: Bounce admins away from the user site
     if current_user.role == 'admin':
         return redirect(url_for('admin_dashboard'))
 
