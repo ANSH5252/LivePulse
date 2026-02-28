@@ -1,11 +1,14 @@
 import os
 import redis
 import mysql.connector
+import secrets
+import string
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_socketio import SocketIO
 from dotenv import load_dotenv, find_dotenv
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
+# --- SETUP & INITIALIZATION ---
 load_dotenv(find_dotenv())
 
 app = Flask(__name__, template_folder="../frontend", static_folder="../frontend")
@@ -26,6 +29,7 @@ def get_db_connection():
         database=os.getenv("MYSQL_DB")
     )
 
+# --- FLASK-LOGIN SETUP ---
 class User(UserMixin):
     def __init__(self, id, username, role):
         self.id = id
@@ -181,7 +185,131 @@ def vote():
         cursor.close()
         conn.close()
 
-# --- ADMIN API ENDPOINTS ---
+# --- ADMIN SCANNER API ---
+@app.route('/api/admin/scan_ticket', methods=['POST'])
+@login_required
+def scan_ticket():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized! Admins only."}), 403
+
+    data = request.json
+    qr_text = data.get('qr_text')
+    poll_id = data.get('poll_id')
+
+    if not qr_text or not qr_text.startswith("LIVEPULSE_USER_"):
+        return jsonify({"error": "Invalid QR Code format."}), 400
+    if not poll_id:
+        return jsonify({"error": "No poll selected for check-in."}), 400
+
+    try:
+        scanned_user_id = int(qr_text.split('_')[-1])
+    except (ValueError, IndexError):
+        return jsonify({"error": "Corrupted User ID in QR Code."}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 1. Verify poll is active
+        cursor.execute("SELECT id FROM polls WHERE id = %s AND is_active = TRUE", (poll_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "This poll is no longer active! Cannot check-in."}), 400
+
+        # 2. Get user info
+        cursor.execute("SELECT username FROM users WHERE id = %s", (scanned_user_id,))
+        user_info = cursor.fetchone()
+        
+        if not user_info:
+            return jsonify({"error": "User not found in database."}), 404
+
+        # 3. Check for duplicates
+        cursor.execute("""
+            SELECT is_present FROM event_attendees 
+            WHERE user_id = %s AND poll_id = %s
+        """, (scanned_user_id, poll_id))
+        attendance_record = cursor.fetchone()
+
+        if attendance_record and attendance_record['is_present']:
+            return jsonify({"error": f"Already Scanned! {user_info['username']} is already checked in."}), 400
+
+        # 4. Insert/Update Check-in
+        cursor.execute("""
+            INSERT INTO event_attendees (user_id, poll_id, is_present)
+            VALUES (%s, %s, TRUE)
+            ON DUPLICATE KEY UPDATE is_present = TRUE
+        """, (scanned_user_id, poll_id))
+        conn.commit()
+
+        return jsonify({"message": f"✅ Check-in successful: {user_info['username']}!"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --- ADMIN DISPATCH API ---
+@app.route('/api/admin/dispatch_tokens', methods=['POST'])
+@login_required
+def dispatch_tokens():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized! Admins only."}), 403
+
+    poll_id = request.json.get('poll_id')
+    if not poll_id:
+        return jsonify({"error": "No poll selected."}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Prevent double-generation
+        cursor.execute("SELECT COUNT(*) as count FROM poll_tokens WHERE poll_id = %s", (poll_id,))
+        if cursor.fetchone()['count'] > 0:
+            return jsonify({"error": "Tokens have already been generated for this poll!"}), 400
+
+        # Fetch checked-in attendees
+        cursor.execute("""
+            SELECT u.id, u.email, u.username 
+            FROM event_attendees ea
+            JOIN users u ON ea.user_id = u.id
+            WHERE ea.poll_id = %s AND ea.is_present = TRUE
+        """, (poll_id,))
+        
+        attendees = cursor.fetchall()
+        
+        if not attendees:
+            return jsonify({"error": "No attendees have checked in yet! Scan QRs first."}), 400
+
+        tokens_generated = 0
+        print(f"\n--- 🚀 GENERATING IN-APP TOKENS FOR POLL {poll_id} ---")
+
+        for attendee in attendees:
+            # Generate secure 7-char PIN
+            alphabet = string.ascii_uppercase + string.digits
+            token = ''.join(secrets.choice(alphabet) for _ in range(7))
+            
+            # Save to Vault
+            cursor.execute("""
+                INSERT INTO poll_tokens (poll_id, token_code) 
+                VALUES (%s, %s)
+            """, (poll_id, token))
+            
+            # Print to console for testing
+            print(f"🔐 TOKEN GENERATED FOR {attendee['username']}: {token}")
+            
+            tokens_generated += 1
+        
+        conn.commit()
+        return jsonify({"message": f"✅ Successfully generated {tokens_generated} PINs for In-App Dispatch!"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --- ADMIN API ENDPOINTS (SIMULATE/END) ---
 @app.route('/api/admin/simulate', methods=['POST'])
 @login_required
 def simulate_votes():
