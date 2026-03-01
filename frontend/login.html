@@ -4,27 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LivePulse - Portal Access</title>
-    <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; margin: 0; }
-        .login-container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; text-align: center; }
-        .portal-toggle { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #eee; }
-        .toggle-btn { flex: 1; padding: 10px; cursor: pointer; border: none; background: none; font-size: 16px; font-weight: bold; color: #888; transition: 0.3s; }
-        .toggle-btn.active { color: #007bff; border-bottom: 3px solid #007bff; }
-        
-        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button[type="submit"] { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
-        button[type="submit"]:hover { background-color: #0056b3; }
-        
-        #admin-badge { display: none; color: #dc3545; font-size: 0.9em; margin-bottom: 10px; }
-        .admin-active button[type="submit"] { background-color: #dc3545; }
-        .admin-active button[type="submit"]:hover { background-color: #c82333; }
-        .admin-active .toggle-btn.active { color: #dc3545; border-bottom: 3px solid #dc3545; }
-        .link { display: block; margin-top: 15px; color: #007bff; text-decoration: none; font-size: 0.9em; }
-        .link:hover { text-decoration: underline; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 </head>
 <body>
-
     <div class="login-container" id="login-box">
         <h2 style="margin-top: 0;">LivePulse Access</h2>
         
@@ -67,6 +49,5 @@
             }
         }
     </script>
-
 </body>
 </html>

@@ -4,18 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LivePulse - Register</title>
-    <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; margin: 0; }
-        .login-container { background: white; padding: 2.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button[type="submit"] { width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; transition: 0.2s; }
-        button[type="submit"]:hover { background-color: #218838; }
-        .link { display: block; margin-top: 15px; color: #007bff; text-decoration: none; font-size: 0.9em; }
-        .link:hover { text-decoration: underline; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 </head>
 <body>
-
     <div class="login-container">
         <h2 style="margin-top: 0; color: #333;">Create Account</h2>
         <p style="color: #666; font-size: 0.9em; margin-bottom: 20px;">Register to receive your unique event QR code.</p>
@@ -29,6 +20,5 @@
         
         <a href="/login" class="link">Already have an account? Login here.</a>
     </div>
-
 </body>
 </html>
