@@ -3,35 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LivePulse - Admin Dashboard</title>
+    <title>LivePulse - Admin Central</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; margin: 0; }
+        
+        /* HEADER & DYNAMIC MENUS */
         .header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto; }
-        .btn-logout { background-color: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .btn-logout { background-color: #dc3545; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; transition: 0.3s; }
+        .btn-logout:hover { background-color: #c82333; }
+        
+        .menu-dropdown { position: relative; display: inline-block; }
+        .menu-btn { background: none; border: none; font-size: 28px; cursor: pointer; color: #6f42c1; padding: 0 10px; transition: 0.3s; }
+        .menu-btn:hover { color: #333; }
+        .menu-content { display: none; position: absolute; right: 0; background-color: white; min-width: 150px; box-shadow: 0px 8px 16px rgba(0,0,0,0.2); z-index: 1000; border-radius: 5px; overflow: hidden; border: 1px solid #ddd; }
+        .menu-content a { color: #333; padding: 12px 16px; text-decoration: none; display: block; font-weight: bold; border-bottom: 1px solid #eee; }
+        .menu-content a:last-child { border-bottom: none; }
+        .menu-content a:hover { background-color: #f1f1f1; color: #6f42c1; }
+        .menu-dropdown:hover .menu-content { display: block; }
+
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .btn-create { background-color: #6f42c1; color: white; padding: 12px 20px; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; display: block; width: 100%; margin-top: 25px; transition: 0.3s; }
         .btn-create:hover { background-color: #59339d; }
-        .accordion { background-color: #343a40; color: white; cursor: pointer; padding: 15px; width: 100%; text-align: left; border: none; outline: none; transition: 0.4s; font-size: 18px; border-radius: 5px; margin-bottom: 5px; font-weight: bold; }
-        .accordion.ongoing { background-color: #28a745; }
+        
+        /* ACCORDIONS */
+        .accordion { background-color: #5cb85c; color: white; cursor: pointer; padding: 15px; width: 100%; text-align: left; border: none; outline: none; transition: 0.4s; font-size: 18px; border-radius: 5px; margin-bottom: 5px; font-weight: bold; }
         .accordion.ended { background-color: #6c757d; }
         .active, .accordion:hover { filter: brightness(1.1); }
         .panel { padding: 0 15px; background-color: #fafafa; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; border-radius: 0 0 5px 5px; margin-bottom: 15px; }
+        
+        /* MANAGE EVENT PANEL */
+        .manage-event-btn { background-color: #5bc0de; color: white; cursor: pointer; padding: 12px; width: 100%; text-align: center; border: none; outline: none; transition: 0.3s; font-size: 16px; border-radius: 5px; margin-top: 15px; margin-bottom: 15px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .manage-event-btn:hover { background-color: #31b0d5; }
+        .manage-panel { display: none; padding: 20px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 20px; text-align: center; }
+
         .poll-list-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #ddd; }
         .poll-list-item:last-child { border-bottom: none; }
-        .btn-view { background-color: #17a2b8; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .btn-view { background-color: #5bc0de; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-view:hover { background-color: #31b0d5; }
+        
+        #detail-view { display: none; }
+        .btn-end-poll { background-color: #d9534f; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.3s;}
+        .btn-end-poll:hover { background-color: #c9302c; }
+        
+        /* INNER TOOLS */
+        .tool-section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px dashed #ccc; }
+        .tool-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .chart-container { position: relative; height: 450px; width: 100%; margin-top: 20px; }
+        
+        /* Modals & Inputs */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
         .modal-content { background-color: white; margin: 10% auto; padding: 20px; border-radius: 8px; width: 90%; max-width: 500px; }
         .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
         .close-btn:hover { color: black; }
-        #detail-view { display: none; }
-        .btn-back { background-color: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
-        .btn-end-poll { background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-left: 10px; }
-        .admin-panel { padding: 15px; border: 2px dashed #dc3545; border-radius: 8px; background-color: #fff8f8; margin-bottom: 20px; }
-        .scanner-panel { padding: 15px; border: 2px dashed #17a2b8; border-radius: 8px; background-color: #f0f8ff; margin-bottom: 20px; text-align: center; }
-        .chart-container { position: relative; height: 400px; width: 100%; }
         input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         .option-group { margin-bottom: 10px; }
         .add-btn { background-color: #17a2b8; color: white; margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer; }
@@ -41,9 +67,18 @@
 <body>
 
     <div class="header">
-        <h2 style="margin: 0; color: #dc3545;">⚙️ LivePulse Admin Central</h2>
-        <div>
+        <h2 id="main-header-title" style="margin: 0; color: #6f42c1; font-weight: 800; text-transform: uppercase;">⚙️ LivePulse Admin Central</h2>
+        
+        <div id="header-dashboard-controls">
             <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+
+        <div id="header-detail-controls" class="menu-dropdown" style="display: none;">
+            <button class="menu-btn">☰</button>
+            <div class="menu-content">
+                <a href="#" onclick="goHome()">🏠 Home</a>
+                <a href="/logout">🚪 Logout</a>
+            </div>
         </div>
     </div>
 
@@ -59,7 +94,7 @@
                         </div>
                     {% endfor %}
                 {% else %}
-                    <p style="padding: 15px;">No active polls currently running.</p>
+                    <p style="padding: 15px; color: #777;">No active polls currently running.</p>
                 {% endif %}
             </div>
 
@@ -73,7 +108,7 @@
                         </div>
                     {% endfor %}
                 {% else %}
-                    <p style="padding: 15px;">No archived polls found.</p>
+                    <p style="padding: 15px; color: #777;">No archived polls found.</p>
                 {% endif %}
             </div>
 
@@ -81,33 +116,38 @@
         </div>
 
         <div id="detail-view">
-            <button class="btn-back" onclick="closeDetailView()">← Back to Dashboard</button>
-            <button class="btn-end-poll" id="btn-end-poll" style="display: none;">🛑 End This Poll</button>
-            
-            <h2 id="detail-title" style="margin-top: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;"></h2>
-
-            <div class="scanner-panel" id="detail-scanner" style="display: none;">
-                <h3 style="color: #17a2b8; margin-top: 0;">📷 Step 1: Scan QRs for this Event</h3>
-                <p style="font-size: 0.9em; color: #555;">Check attendees into this specific poll.</p>
-                
-                <button id="btn-start-scan" style="background-color: #17a2b8; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Scan QRs</button>
-                <button id="btn-stop-scan" style="background-color: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: none;">Stop Camera</button>
-                
-                <div id="reader" style="width: 100%; max-width: 450px; margin: 15px auto; display: none;"></div>
-                <div id="scan-result" style="margin-top: 15px; font-weight: bold; font-size: 1.1em;"></div>
-
-                <hr style="border: 1px solid #dee2e6; margin: 20px 0;">
-                <h4 style="color: #6f42c1; margin-top: 0;">📨 Step 2: Dispatch Voting PINs</h4>
-                <p style="font-size: 0.9em; color: #555;">Securely generate 7-digit voting PINs for everyone checked in. They will receive this in their Notification Center.</p>
-                <button id="btn-dispatch" onclick="dispatchTokens()" style="background-color: #6f42c1; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Generate & Dispatch PINs</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                <h2 id="detail-title" style="margin: 0; font-size: 1.6em; color: #333;"></h2>
+                <button class="btn-end-poll" id="btn-end-poll" style="display: none;">⭕ End Poll</button>
             </div>
 
-            <div class="admin-panel" id="detail-simulator" style="display: none;">
-                <h4 style="color: #dc3545; margin-top: 0;">🛠️ Traffic Simulator (Admin Only)</h4>
-                <input type="number" id="sim-count" value="25" min="1" style="width: 70px; padding: 8px;">
-                <select id="sim-option" style="padding: 8px; margin-right: 10px;"></select>
-                <button style="background-color: #dc3545; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer;" onclick="simulateVotes()">Inject Fake Votes</button>
-                <span id="sim-msg" style="margin-left: 10px; font-weight: bold; color: #28a745;"></span>
+            <button id="btn-manage-event" class="manage-event-btn" onclick="toggleManageEvent()" style="display: none;">
+                ⚙️ Manage Event ▼
+            </button>
+            
+            <div id="manage-event-panel" class="manage-panel">
+                <div class="tool-section">
+                    <h3 style="color: #5bc0de; margin-top: 0; font-size: 1.2em;">📷 Step 1: Scan QRs for this Event</h3>
+                    <p style="font-size: 0.9em; color: #555;">Check attendees into this specific poll.</p>
+                    <button id="btn-start-scan" style="background-color: #5bc0de; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Scan QRs</button>
+                    <button id="btn-stop-scan" style="background-color: #d9534f; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: none;">Stop Camera</button>
+                    <div id="reader" style="width: 100%; max-width: 400px; margin: 15px auto; display: none; border-radius: 8px; overflow: hidden; border: 2px solid #5bc0de;"></div>
+                    <div id="scan-result" style="margin-top: 10px; font-weight: bold; font-size: 1.1em;"></div>
+                </div>
+
+                <div class="tool-section">
+                    <h3 style="color: #6f42c1; margin-top: 0; font-size: 1.2em;">📨 Step 2: Dispatch Voting PINs</h3>
+                    <p style="font-size: 0.9em; color: #555;">Securely generate 7-digit voting PINs for everyone checked in.</p>
+                    <button id="btn-dispatch" onclick="dispatchTokens()" style="background-color: #6f42c1; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Generate & Dispatch PINs</button>
+                </div>
+
+                <div class="tool-section" style="border-bottom: none; padding-bottom: 0;">
+                    <h3 style="color: #d9534f; margin-top: 0; font-size: 1.2em;">🛠️ Traffic Simulator (Admin Only)</h3>
+                    <input type="number" id="sim-count" value="25" min="1" style="width: 70px; padding: 8px; display: inline-block;">
+                    <select id="sim-option" style="padding: 8px; margin-right: 10px;"></select>
+                    <button style="background-color: #d9534f; color: white; font-weight: bold; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer;" onclick="simulateVotes()">Inject Fake Votes</button>
+                    <span id="sim-msg" style="margin-left: 10px; font-weight: bold; color: #28a745;"></span>
+                </div>
             </div>
 
             <div class="chart-container">
@@ -129,12 +169,13 @@
                     <div class="option-group"><input type="text" name="options[]" placeholder="Option 2" required></div>
                 </div>
                 <button type="button" class="add-btn" onclick="addOption()">➕ Add Option</button>
-                <button type="submit" class="submit-btn">🚀 Launch Poll to Users</button>
+                <button type="submit" class="submit-btn">🚀 Launch Poll</button>
             </form>
         </div>
     </div>
 
     <script>
+        // Modal Logic
         function openModal() { document.getElementById('createModal').style.display = 'block'; }
         function closeModal() { document.getElementById('createModal').style.display = 'none'; }
         window.onclick = function(event) { if (event.target == document.getElementById('createModal')) closeModal(); }
@@ -160,6 +201,32 @@
         }
         if(acc.length > 0) { acc[0].click(); acc[1].click(); }
 
+        function toggleManageEvent() {
+            const panel = document.getElementById('manage-event-panel');
+            const btn = document.getElementById('btn-manage-event');
+            if (panel.style.display === 'none' || panel.style.display === '') {
+                panel.style.display = 'block';
+                btn.innerHTML = '⚙️ Manage Event ▲';
+            } else {
+                panel.style.display = 'none';
+                btn.innerHTML = '⚙️ Manage Event ▼';
+            }
+        }
+
+        function goHome() {
+            stopCamera();
+            document.getElementById('detail-view').style.display = 'none';
+            document.getElementById('dashboard-view').style.display = 'block';
+            document.getElementById('manage-event-panel').style.display = 'none';
+            document.getElementById('btn-manage-event').innerHTML = '⚙️ Manage Event ▼';
+            
+            document.getElementById('main-header-title').innerHTML = '⚙️ LivePulse Admin Central';
+            document.getElementById('header-dashboard-controls').style.display = 'block';
+            document.getElementById('header-detail-controls').style.display = 'none';
+            
+            currentlyViewedPollId = null;
+        }
+
         const activePolls = {{ active_polls | tojson | safe if active_polls else '[]' }};
         const endedPolls = {{ ended_polls | tojson | safe if ended_polls else '[]' }};
         const allPollsMap = {};
@@ -169,13 +236,20 @@
         let currentChart = null;
         let currentlyViewedPollId = null;
         let isCameraActive = false; 
-        const colorPalette = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14'];
+        
+        // VIBRANT COLOR PALETTE (Neon/Bright tones)
+        const colorPalette = ['#FF3B30', '#007AFF', '#34C759', '#FF9F0A', '#AF52DE', '#32ADE6', '#FF2D55'];
 
         function getSortedData(scoresObj, optionsArray) {
             const colorMap = {};
+            // Lock colors to the specific option so they don't jump around when sorting
             optionsArray.forEach((opt, index) => { colorMap[opt.option_name] = colorPalette[index % colorPalette.length]; });
+            
             let entries = Object.keys(scoresObj).map(key => ({ label: key, votes: Number(scoresObj[key]) }));
+            
+            // SORT IN ASCENDING ORDER (Lowest votes on left, highest on right)
             entries.sort((a, b) => a.votes - b.votes); 
+            
             return {
                 labels: entries.map(e => e.label),
                 votes: entries.map(e => e.votes),
@@ -189,16 +263,24 @@
 
             document.getElementById('dashboard-view').style.display = 'none';
             document.getElementById('detail-view').style.display = 'block';
-            document.getElementById('detail-title').innerText = poll.title + (poll.isActive ? " (Live)" : " (Ended)");
+            
+            document.getElementById('detail-title').innerText = poll.title + (poll.isActive ? " (LIVE)" : "");
+            
+            if (poll.isActive) {
+                document.getElementById('main-header-title').innerText = 'LIVEPULSE LIVE POLL MANAGEMENT';
+            } else {
+                document.getElementById('main-header-title').innerText = 'ENDED POLLS';
+            }
+            
+            document.getElementById('header-dashboard-controls').style.display = 'none';
+            document.getElementById('header-detail-controls').style.display = 'inline-block';
 
-            const simPanel = document.getElementById('detail-simulator');
+            const manageBtn = document.getElementById('btn-manage-event');
             const endBtn = document.getElementById('btn-end-poll');
-            const scannerPanel = document.getElementById('detail-scanner');
             const simSelect = document.getElementById('sim-option');
             
             if (poll.isActive) {
-                simPanel.style.display = 'block';
-                scannerPanel.style.display = 'block';
+                manageBtn.style.display = 'block';
                 endBtn.style.display = 'inline-block';
                 endBtn.onclick = () => endActivePoll(poll.id);
                 
@@ -207,24 +289,37 @@
                     simSelect.innerHTML += `<option value="${opt.option_name}">${opt.option_name}</option>`;
                 });
             } else {
-                simPanel.style.display = 'none';
-                scannerPanel.style.display = 'none';
+                manageBtn.style.display = 'none';
                 endBtn.style.display = 'none';
+                document.getElementById('manage-event-panel').style.display = 'none';
             }
 
             if (currentChart) { currentChart.destroy(); }
             const ctx = document.getElementById('detailChart').getContext('2d');
             const sortedData = getSortedData(poll.scores, poll.options);
 
+            const totalVotes = sortedData.votes.reduce((sum, current) => sum + current, 0);
+
             currentChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: sortedData.labels,
-                    datasets: [{ label: 'Total Votes', data: sortedData.votes, backgroundColor: sortedData.colors, borderWidth: 1 }]
+                    datasets: [{ label: 'Votes', data: sortedData.votes, backgroundColor: sortedData.colors, borderWidth: 1 }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, ticks: { stepSize: 5 } } },
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Total Votes = ' + totalVotes,
+                            font: { size: 18, weight: 'bold' },
+                            padding: { top: 10, bottom: 20 },
+                            color: '#333'
+                        },
+                        legend: { display: false }
+                    },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
                     animation: { duration: 500, easing: 'easeOutQuart' }
                 }
             });
@@ -283,25 +378,11 @@
             scanResultBox.innerText = "";
 
             try {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear(); 
-                }).catch(err => {
-                    html5QrCode.resume();
-                    html5QrCode.stop().catch(e => console.log("Background cleanup:", e));
-                });
-            } catch (error) {
-                console.log("Scanner already stopped.");
-            }
+                html5QrCode.stop().then(() => { html5QrCode.clear(); }).catch(e => console.log(e));
+            } catch (error) { console.log("Scanner already stopped."); }
         }
 
         btnStopScan.addEventListener('click', stopCamera);
-
-        function closeDetailView() {
-            stopCamera(); 
-            document.getElementById('detail-view').style.display = 'none';
-            document.getElementById('dashboard-view').style.display = 'block';
-            currentlyViewedPollId = null;
-        }
 
         // --- TOKEN DISPATCH LOGIC ---
         function dispatchTokens() {
@@ -319,11 +400,8 @@
                 dispatchBtn.innerText = "Generate & Dispatch PINs";
                 dispatchBtn.disabled = false;
                 
-                if (data.error) {
-                    alert("❌ " + data.error);
-                } else {
-                    alert("✅ " + data.message);
-                }
+                if (data.error) alert("❌ " + data.error);
+                else alert("✅ " + data.message);
             });
         }
 
@@ -355,14 +433,20 @@
             }
         }
 
+        // --- LIVE SOCKET CHART UPDATES ---
         const socket = io();
         socket.on('update_chart', function(data) {
             if (currentlyViewedPollId && allPollsMap[currentlyViewedPollId].isActive && currentChart) {
                 const poll = allPollsMap[currentlyViewedPollId];
                 const sorted = getSortedData(data, poll.options);
+                
                 currentChart.data.labels = sorted.labels;
                 currentChart.data.datasets[0].data = sorted.votes;
                 currentChart.data.datasets[0].backgroundColor = sorted.colors;
+                
+                const newTotalVotes = sorted.votes.reduce((sum, current) => sum + current, 0);
+                currentChart.options.plugins.title.text = 'Total Votes = ' + newTotalVotes;
+                
                 currentChart.update();
             }
         });
