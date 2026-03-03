@@ -2,56 +2,69 @@ import redis
 import mysql.connector
 import time
 import os
+import json
 from dotenv import load_dotenv
 
-# 1. Load the secret variables from the .env file
+# 1. Load the secret variables
 load_dotenv()
 
-# 2. Connect to Redis (Short-term memory)
+# 2. Connect to Redis (Short-term memory & Message Queue)
 redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-# 3. Connect to MySQL (Permanent storage)
-try:
-    db = mysql.connector.connect(
+def get_db():
+    return mysql.connector.connect(
         host=os.getenv("MYSQL_HOST"),
         user=os.getenv("MYSQL_USER"),
         password=os.getenv("MYSQL_PASSWORD"),
         database=os.getenv("MYSQL_DB")
     )
+
+def process_vote_queue():
+    # Check if there are any votes waiting in the queue
+    queue_len = redis_client.llen("vote_queue")
+    if queue_len == 0:
+        print("⏳ No new votes in queue. Waiting...")
+        return
+
+    print(f"📥 Found {queue_len} votes in queue. Syncing to MySQL...")
+    
+    db = get_db()
     cursor = db.cursor()
-    print("✅ Worker connected to MySQL securely!")
-except mysql.connector.Error as err:
-    print(f"❌ MySQL Connection Error: {err}")
-    exit()
-
-def sync_to_mysql():
+    
     try:
-        # Fetch all current scores from Redis
-        scores = redis_client.hgetall("poll_results")
-        
-        if not scores:
-            print("⏳ No votes in Redis yet. Waiting...")
-            return
-
-        # Loop through each candidate's score and save it to MySQL
-        for candidate, votes in scores.items():
-            # This inserts the candidate if new, or updates their score if they exist
-            sql = """
-            INSERT INTO votes (candidate_name, total_votes) 
-            VALUES (%s, %s) 
-            ON DUPLICATE KEY UPDATE total_votes = %s
-            """
-            cursor.execute(sql, (candidate, int(votes), int(votes)))
-        
+        # Process every vote currently in the queue
+        while True:
+            # Pop the oldest vote from the right side of the list
+            raw_vote = redis_client.rpop("vote_queue")
+            if not raw_vote:
+                break # Queue is empty
+            
+            vote = json.loads(raw_vote)
+            
+            # Write the individual user's vote history to MySQL
+            try:
+                cursor.execute(
+                    "INSERT INTO user_votes (user_id, poll_id, option_id) VALUES (%s, %s, %s)",
+                    (vote['user_id'], vote['poll_id'], vote['option_id'])
+                )
+            except mysql.connector.IntegrityError:
+                # Safety catch: Ignore if the user somehow already has a recorded vote
+                pass 
+            
+        # Commit all the database writes at once for maximum efficiency
         db.commit()
-        print(f"💾 Successfully backed up live scores to MySQL at {time.strftime('%X')}")
+        print(f"💾 Successfully wrote batch of votes to MySQL at {time.strftime('%X')}")
 
     except Exception as e:
-        print(f"❌ Error syncing: {e}")
+        print(f"❌ Error syncing to database: {e}")
+        db.rollback()
+    finally:
+        cursor.close()
+        db.close()
 
 if __name__ == "__main__":
     print("🚀 LivePulse Background Sync Worker Started...")
-    # Run a continuous loop that syncs every 10 seconds
+    # Run a continuous loop that checks the queue every 10 seconds
     while True:
-        sync_to_mysql()
+        process_vote_queue()
         time.sleep(10)

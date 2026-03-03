@@ -3,6 +3,7 @@ import redis
 import mysql.connector
 import secrets
 import string
+import json
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_socketio import SocketIO, join_room, leave_room
 from dotenv import load_dotenv, find_dotenv
@@ -11,10 +12,13 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 # --- SETUP & INITIALIZATION ---
 load_dotenv(find_dotenv())
 
-app = Flask(__name__, template_folder="../frontend", static_folder="../frontend")
-app.secret_key = "super_secret_livepulse_key_change_this_later"
+# BULLETPROOF PATHS: Automatically find the frontend folder no matter where you run this script from
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend')
 
-# use_reloader=False prevents Socket.IO from starting twice during development
+app = Flask(__name__, template_folder=FRONTEND_DIR, static_folder=FRONTEND_DIR)
+app.secret_key = os.getenv("SECRET_KEY", "super_secret_livepulse_key")
+
 socketio = SocketIO(app, cors_allowed_origins="*")
 redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
@@ -30,7 +34,6 @@ def get_db_connection():
         database=os.getenv("MYSQL_DB")
     )
 
-# --- FLASK-LOGIN SETUP ---
 class User(UserMixin):
     def __init__(self, id, username, role):
         self.id = id
@@ -45,70 +48,40 @@ def load_user(user_id):
     user_data = cursor.fetchone()
     cursor.close()
     conn.close()
-    
-    if user_data:
-        return User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
+    if user_data: return User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
     return None
 
-# --- AUTHENTICATION ROUTES ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-
+    if current_user.is_authenticated: return redirect(url_for('index'))
     if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
+        username, email, password = request.form.get('username'), request.form.get('email'), request.form.get('password')
+        conn = get_db_connection(); cursor = conn.cursor()
         try:
-            cursor.execute(
-                "INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, 'user')",
-                (username, email, password)
-            )
+            cursor.execute("INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, 'user')", (username, email, password))
             conn.commit()
-            
-            new_user_id = cursor.lastrowid
-            user = User(id=new_user_id, username=username, role='user')
-            login_user(user)
+            login_user(User(id=cursor.lastrowid, username=username, role='user'))
             return redirect(url_for('index'))
-            
         except mysql.connector.IntegrityError:
             return "❌ That username or email is already taken!", 400
-        except Exception as e:
-            return f"❌ Error: {str(e)}", 500
         finally:
-            cursor.close()
-            conn.close()
-
+            cursor.close(); conn.close()
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        username, password = request.form.get('username'), request.form.get('password')
+        conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         user_data = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
 
         if user_data and user_data['password_hash'] == password:
             user = User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
             login_user(user)
-            
-            if user.role == 'admin':
-                return redirect(url_for('admin_dashboard'))
-            return redirect(url_for('index'))
-        else:
-            return "❌ Invalid username or password. Try again!", 401
-            
+            return redirect(url_for('admin_dashboard')) if user.role == 'admin' else redirect(url_for('index'))
+        return "❌ Invalid username or password. Try again!", 401
     return render_template('login.html')
 
 @app.route('/logout')
@@ -117,253 +90,154 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# --- PRIVATE WEBSOCKET ROOMS ---
 @socketio.on('join')
 def on_join(data):
-    user_id = data.get('user_id')
-    if user_id:
-        room = f"user_{user_id}"
-        join_room(room)
+    if data.get('user_id'): join_room(f"user_{data.get('user_id')}")
 
-# --- USER DASHBOARD (SPA STATE MANAGER) ---
 @app.route('/')
 @login_required
 def index():
-    if current_user.role == 'admin':
-        return redirect(url_for('admin_dashboard'))
+    if current_user.role == 'admin': return redirect(url_for('admin_dashboard'))
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
+    conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM polls WHERE is_active = TRUE ORDER BY id DESC LIMIT 1")
     poll = cursor.fetchone()
     
-    options = []
-    initial_scores = {}
-    
-    is_present = False
-    has_verified = False
-    has_voted = False
-    my_token = None # Recover assigned token from DB if browser was refreshed
+    options, initial_scores = [], {}
+    is_present, has_verified, has_voted, my_token = False, False, False, None
 
     if poll:
         cursor.execute("SELECT * FROM poll_options WHERE poll_id = %s", (poll['id'],))
         options = cursor.fetchall()
         
         raw_scores = redis_client.hgetall(f"poll_{poll['id']}_results")
-        for opt in options:
-            initial_scores[opt['option_name']] = int(raw_scores.get(opt['option_name'], 0))
+        for opt in options: initial_scores[opt['option_name']] = int(raw_scores.get(opt['option_name'], 0))
             
-        # 1. Check Scan Status
         cursor.execute("SELECT is_present FROM event_attendees WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
         att = cursor.fetchone()
         if att and att['is_present']: is_present = True
             
-        # 2. Check Token Status and Fetch Token Code if not used yet
         cursor.execute("SELECT is_used, token_code FROM poll_tokens WHERE used_by_user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
         token_record = cursor.fetchone()
         if token_record:
+            my_token = token_record['token_code'] # Now it persists even if used!
             if token_record['is_used']: 
                 has_verified = True
-            else:
-                my_token = token_record['token_code'] # Persistence: recovered token
             
-        # 3. Check Voting Status
-        cursor.execute("SELECT id FROM user_votes WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
-        if cursor.fetchone(): has_voted = True
+        # Check Redis first for instant feedback, fallback to DB
+        if redis_client.sismember(f"poll_{poll['id']}_voted_users", current_user.id):
+            has_voted = True
+        else:
+            cursor.execute("SELECT id FROM user_votes WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
+            if cursor.fetchone(): has_voted = True
 
-    cursor.close()
-    conn.close()
-    
-    return render_template('index.html', 
-                           user=current_user, poll=poll, options=options, 
-                           initial_scores=initial_scores, is_present=is_present, 
-                           has_verified=has_verified, has_voted=has_voted, my_token=my_token)
+    cursor.close(); conn.close()
+    return render_template('index.html', user=current_user, poll=poll, options=options, initial_scores=initial_scores, is_present=is_present, has_verified=has_verified, has_voted=has_voted, my_token=my_token)
 
-# --- TOKEN VERIFICATION API ---
 @app.route('/api/verify_token', methods=['POST'])
 @login_required
 def verify_token():
-    data = request.json
-    poll_id = data.get('poll_id')
-    token = data.get('token')
-
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    poll_id, token = request.json.get('poll_id'), request.json.get('token')
+    conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
     try:
-        # Check if token exists, belongs to user, and is for this poll
-        cursor.execute("""
-            SELECT id, is_used, used_by_user_id FROM poll_tokens 
-            WHERE poll_id = %s AND token_code = %s AND used_by_user_id = %s
-        """, (poll_id, token, current_user.id))
+        cursor.execute("SELECT id, is_used FROM poll_tokens WHERE poll_id = %s AND token_code = %s AND used_by_user_id = %s", (poll_id, token, current_user.id))
         token_record = cursor.fetchone()
+        if not token_record: return jsonify({"error": "Invalid PIN code."}), 400
+        if token_record['is_used']: return jsonify({"error": "This PIN has already been used!"}), 400
 
-        if not token_record:
-            return jsonify({"error": "Invalid PIN code. Please check your Notification Center."}), 400
-        if token_record['is_used']:
-            return jsonify({"error": "This PIN has already been used!"}), 400
-
-        # Mark PIN as used
         cursor.execute("UPDATE poll_tokens SET is_used = TRUE WHERE id = %s", (token_record['id'],))
         conn.commit()
-        
         return jsonify({"message": "PIN Verified Successfully! Voting Unlocked."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
 
-# --- VOTING API & SOCKETS ---
+# --- NO DB WRITES OCCUR IN THIS ROUTE ANYMORE ---
 @app.route('/api/vote', methods=['POST'])
 @login_required
 def vote():
-    data = request.json
-    poll_id, option_id, option_name = data.get('poll_id'), data.get('option_id'), data.get('option_name')
+    poll_id, option_id, option_name = request.json.get('poll_id'), request.json.get('option_id'), request.json.get('option_name')
 
+    # 1. Instant Duplicate Check via Redis Memory
+    voted_key = f"poll_{poll_id}_voted_users"
+    if redis_client.sismember(voted_key, current_user.id):
+        return jsonify({"error": "You have already voted on this poll!"}), 403
+
+    # 2. Verify PIN (Read-Only DB Call)
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-        # Double-check verification status in DB
         cursor.execute("SELECT id FROM poll_tokens WHERE poll_id = %s AND used_by_user_id = %s AND is_used = TRUE", (poll_id, current_user.id))
-        if not cursor.fetchone():
-            return jsonify({"error": "Security breach: You must verify your 7-digit PIN before voting!"}), 403
-
-        cursor.execute(
-            "INSERT INTO user_votes (user_id, poll_id, option_id) VALUES (%s, %s, %s)",
-            (current_user.id, poll_id, option_id)
-        )
-        conn.commit()
-
-        redis_client.hincrby(f"poll_{poll_id}_results", option_name, 1)
-        socketio.emit('update_chart', redis_client.hgetall(f"poll_{poll_id}_results"))
-
-        return jsonify({"message": "Vote cast successfully!"}), 200
-
-    except mysql.connector.IntegrityError:
-        return jsonify({"error": "You have already voted on this poll!"}), 403
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        if not cursor.fetchone(): return jsonify({"error": "Security breach: You must verify your PIN before voting!"}), 403
     finally:
         cursor.close()
         conn.close()
 
-# --- ADMIN SCANNER API ---
+    # 3. Lock vote in Redis and update live chart
+    redis_client.sadd(voted_key, current_user.id)
+    redis_client.hincrby(f"poll_{poll_id}_results", option_name, 1)
+
+    # 4. Push payload to Redis Message Queue for the Worker to handle
+    vote_payload = {
+        "user_id": current_user.id,
+        "poll_id": poll_id,
+        "option_id": option_id,
+        "option_name": option_name
+    }
+    redis_client.lpush("vote_queue", json.dumps(vote_payload))
+
+    socketio.emit('update_chart', redis_client.hgetall(f"poll_{poll_id}_results"))
+    return jsonify({"message": "Vote cast successfully!"}), 200
+
 @app.route('/api/admin/scan_ticket', methods=['POST'])
 @login_required
 def scan_ticket():
-    if current_user.role != 'admin':
-        return jsonify({"error": "Unauthorized! Admins only."}), 403
+    if current_user.role != 'admin': return jsonify({"error": "Unauthorized"}), 403
+    qr_text, poll_id = request.json.get('qr_text'), request.json.get('poll_id')
+    try: scanned_user_id = int(qr_text.split('_')[-1])
+    except: return jsonify({"error": "Corrupted User ID."}), 400
 
-    data = request.json
-    qr_text, poll_id = data.get('qr_text'), data.get('poll_id')
-
-    if not qr_text or not qr_text.startswith("LIVEPULSE_USER_"):
-        return jsonify({"error": "Invalid QR Code format."}), 400
-
-    try:
-        scanned_user_id = int(qr_text.split('_')[-1])
-    except ValueError:
-        return jsonify({"error": "Corrupted User ID."}), 400
-
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
+    conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("SELECT title FROM polls WHERE id = %s AND is_active = TRUE", (poll_id,))
         active_poll = cursor.fetchone()
-
-        if not active_poll:
-            return jsonify({"error": "This poll is no longer active!"}), 400
-
-        cursor.execute("SELECT username FROM users WHERE id = %s", (scanned_user_id,))
-        user_info = cursor.fetchone()
+        if not active_poll: return jsonify({"error": "This poll is no longer active!"}), 400
 
         cursor.execute("SELECT is_present FROM event_attendees WHERE user_id = %s AND poll_id = %s", (scanned_user_id, poll_id))
-        attendance_record = cursor.fetchone()
+        if cursor.fetchone(): return jsonify({"error": "Already Scanned! User is already checked in."}), 400
 
-        if attendance_record and attendance_record['is_present']:
-            return jsonify({"error": f"Already Scanned! {user_info['username']} is already checked in."}), 400
-
-        cursor.execute("""
-            INSERT INTO event_attendees (user_id, poll_id, is_present)
-            VALUES (%s, %s, TRUE)
-            ON DUPLICATE KEY UPDATE is_present = TRUE
-        """, (scanned_user_id, poll_id))
+        cursor.execute("INSERT INTO event_attendees (user_id, poll_id, is_present) VALUES (%s, %s, TRUE)", (scanned_user_id, poll_id))
         conn.commit()
-
-        # Real-time success alert to the specific user's room
-        socketio.emit('scan_success', {
-            'poll_id': poll_id, 
-            'poll_name': active_poll['title']
-        }, to=f"user_{scanned_user_id}")
-
-        return jsonify({"message": f"✅ Check-in successful: {user_info['username']}!"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        socketio.emit('scan_success', {'poll_id': poll_id, 'poll_name': active_poll['title']}, to=f"user_{scanned_user_id}")
+        return jsonify({"message": "Check-in successful!"}), 200
     finally:
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
 
-# --- ADMIN DISPATCH API ---
 @app.route('/api/admin/dispatch_tokens', methods=['POST'])
 @login_required
 def dispatch_tokens():
-    if current_user.role != 'admin':
-        return jsonify({"error": "Unauthorized! Admins only."}), 403
-
+    if current_user.role != 'admin': return jsonify({"error": "Unauthorized"}), 403
     poll_id = request.json.get('poll_id')
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
+    conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("SELECT COUNT(*) as count FROM poll_tokens WHERE poll_id = %s", (poll_id,))
-        if cursor.fetchone()['count'] > 0:
-            return jsonify({"error": "Tokens have already been generated for this poll!"}), 400
+        if cursor.fetchone()['count'] > 0: return jsonify({"error": "Tokens have already been generated!"}), 400
 
         cursor.execute("SELECT title FROM polls WHERE id = %s", (poll_id,))
         poll_title = cursor.fetchone()['title']
 
-        cursor.execute("""
-            SELECT u.id, u.username 
-            FROM event_attendees ea
-            JOIN users u ON ea.user_id = u.id
-            WHERE ea.poll_id = %s AND ea.is_present = TRUE
-        """, (poll_id,))
-        
+        cursor.execute("SELECT u.id FROM event_attendees ea JOIN users u ON ea.user_id = u.id WHERE ea.poll_id = %s AND ea.is_present = TRUE", (poll_id,))
         attendees = cursor.fetchall()
-        if not attendees:
-            return jsonify({"error": "No attendees have checked in yet!"}), 400
-
-        tokens_generated = 0
-
+        
         for attendee in attendees:
-            alphabet = string.ascii_uppercase + string.digits
-            token = ''.join(secrets.choice(alphabet) for _ in range(7))
-            
-            # LINK TOKEN TO USER during generation for refresh-persistence
+            token = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(7))
             cursor.execute("INSERT INTO poll_tokens (poll_id, token_code, used_by_user_id) VALUES (%s, %s, %s)", (poll_id, token, attendee['id']))
-            
-            # Send to user room
-            socketio.emit('new_notification', {
-                'poll_name': poll_title, 
-                'token': token
-            }, to=f"user_{attendee['id']}")
-            
-            tokens_generated += 1
+            socketio.emit('new_notification', {'poll_name': poll_title, 'token': token}, to=f"user_{attendee['id']}")
         
         conn.commit()
-        return jsonify({"message": f"✅ Successfully generated and dispatched {tokens_generated} PINs!"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"message": f"✅ Successfully generated {len(attendees)} PINs!"}), 200
     finally:
-        cursor.close()
-        conn.close()
+        cursor.close(); conn.close()
 
-# --- ADMIN API ENDPOINTS (SIMULATE/END) ---
 @app.route('/api/admin/simulate', methods=['POST'])
 @login_required
 def simulate_votes():
@@ -381,11 +255,10 @@ def end_poll():
     conn.commit(); cursor.close(); conn.close()
     return jsonify({"message": "Ended!"}), 200
 
-# --- ADMIN DASHBOARD & POLL CREATION ---
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
 def admin_dashboard():
-    if current_user.role != 'admin': return "❌ Unauthorized! Admins only.", 403
+    if current_user.role != 'admin': return "❌ Unauthorized", 403
     conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
@@ -394,8 +267,7 @@ def admin_dashboard():
         cursor.execute("UPDATE polls SET is_active = FALSE")
         cursor.execute("INSERT INTO polls (title, is_active) VALUES (%s, TRUE)", (title,))
         new_poll_id = cursor.lastrowid
-        for option_name in valid_options:
-            cursor.execute("INSERT INTO poll_options (poll_id, option_name) VALUES (%s, %s)", (new_poll_id, option_name))
+        for option_name in valid_options: cursor.execute("INSERT INTO poll_options (poll_id, option_name) VALUES (%s, %s)", (new_poll_id, option_name))
         conn.commit(); return redirect(url_for('admin_dashboard'))
 
     def fetch_poll_details(query):
@@ -413,4 +285,4 @@ def admin_dashboard():
     return render_template('admin.html', user=current_user, active_polls=active_polls, ended_polls=ended_polls)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
