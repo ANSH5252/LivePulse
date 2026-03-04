@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to LivePulse</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='50%25' stop-color='%234f46e5'/%3E%3Cstop offset='100%25' stop-color='%239333ea'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M 10 35 L 30 50 L 55 15 L 65 40 L 75 10 L 85 45 L 95 25 L 110 25' stroke='url(%23g)' stroke-width='15' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; } /* Deep slate background */
+        
+        /* 1. SVG Drawing Animation */
+        .draw-line {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: draw 1.5s ease-in-out forwards;
+        }
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* 2. Text Fade Up Animation */
+        .fade-up {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s ease-out 1.6s forwards; /* 1.6s delay waits for the logo to finish drawing */
+        }
+        @keyframes fadeUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 3. Blinking Cursor for Typewriter */
+        .cursor::after {
+            content: '|';
+            color: #818cf8;
+            animation: blink 1s step-start infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen text-slate-100 overflow-hidden relative">
+
+    <div class="absolute w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+
+    <div class="z-10 flex flex-col items-center text-center">
+        <svg class="w-56 h-auto drop-shadow-[0_0_15px_rgba(79,70,229,0.4)] mb-4" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="livepulse-grad-landing" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#2563eb" />
+                    <stop offset="50%" stop-color="#4f46e5" />
+                    <stop offset="100%" stop-color="#9333ea" />
+                </linearGradient>
+            </defs>
+            <path class="draw-line" pathLength="100" d="M 10 35 L 30 50 L 55 15 L 65 40 L 75 10 L 85 45 L 95 25 L 110 25" stroke="url(#livepulse-grad-landing)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <h1 class="fade-up text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight mb-4 drop-shadow-sm">
+            LIVEPULSE
+        </h1>
+
+        <p id="typewriter" class="h-6 text-lg md:text-xl text-slate-400 font-medium tracking-wide cursor"></p>
+    </div>
+
+    <script>
+        // Sequence of phrases to type out
+        const phrases = [
+            "Welcome to LivePulse...!",
+            "LivePulse is a Real-Time Voting System.",
+            "LivePulse is Secure, Instant and Fast."
+        ];
+
+        const typeSpeed = 40;        // Milliseconds to type each character
+        const eraseSpeed = 20;       // Milliseconds to backspace each character
+        const delayBetween = 1200;   // Wait 1.2s before erasing the sentence
+        const delayBeforeRedirect = 1500; // Wait 1.5s after the final sentence finishes
+        const initialDelay = 2400;   // Waits 2.4s for logo + title animations to finish
+
+        const typewriterElement = document.getElementById('typewriter');
+        
+        let phraseIndex = 0;
+        let charIndex = 0;
+        let isErasing = false;
+
+        function typeWriter() {
+            const currentPhrase = phrases[phraseIndex];
+
+            if (isErasing) {
+                // Erasing logic (backspacing)
+                typewriterElement.textContent = currentPhrase.substring(0, charIndex - 1);
+                charIndex--;
+                
+                if (charIndex === 0) {
+                    isErasing = false;
+                    phraseIndex++;
+                    setTimeout(typeWriter, 500); // Brief pause before starting the next sentence
+                } else {
+                    setTimeout(typeWriter, eraseSpeed);
+                }
+
+            } else {
+                // Typing logic
+                typewriterElement.textContent = currentPhrase.substring(0, charIndex + 1);
+                charIndex++;
+                
+                if (charIndex === currentPhrase.length) {
+                    // Finished typing the current phrase
+                    if (phraseIndex === phrases.length - 1) {
+                        // If it's the final phrase, do NOT erase. Just wait and redirect!
+                        setTimeout(() => {
+                            typewriterElement.classList.remove('cursor'); // Remove blinking cursor
+                            window.location.href = '/login'; 
+                        }, delayBeforeRedirect);
+                    } else {
+                        // If not the final phrase, wait a moment then start erasing
+                        isErasing = true;
+                        setTimeout(typeWriter, delayBetween);
+                    }
+                } else {
+                    setTimeout(typeWriter, typeSpeed);
+                }
+            }
+        }
+
+        // Start the grand sequence
+        setTimeout(typeWriter, initialDelay);
+    </script>
+</body>
+</html>
