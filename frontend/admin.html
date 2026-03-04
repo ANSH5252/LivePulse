@@ -72,7 +72,7 @@
                 Home
             </button>
 
-            <a href="/logout" id="btn-logout" class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold py-2 px-4 rounded-full shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 border border-rose-600">
+            <a href="/logout" onclick="sessionStorage.clear();" id="btn-logout" class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold py-2 px-4 rounded-full shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 border border-rose-600">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                     <polyline points="16 17 21 12 16 7"></polyline>
@@ -213,6 +213,19 @@
     </div>
 
     <script>
+        // --- STRICT TAB SESSION MANAGEMENT ---
+        // This cleanly detects if the user is reloading the tab (allows access)
+        // or if they opened a brand new tab / closed the old one (forces logout).
+        if (!sessionStorage.getItem('livepulse_tab_active')) {
+            if (document.referrer.startsWith(window.location.origin)) {
+                // They just arrived securely from the login page
+                sessionStorage.setItem('livepulse_tab_active', 'true');
+            } else {
+                // They opened a new tab or reopened a closed tab. Force logout immediately!
+                window.location.replace('/logout');
+            }
+        }
+
         // --- THEME TOGGLE LOGIC ---
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
@@ -255,7 +268,6 @@
                 } 
             });
         }
-        // Auto-open accordions
         setTimeout(() => { if(acc.length > 0) { acc[0].click(); acc[1].click(); } }, 100);
 
         // --- MANAGE EVENT TOGGLE ---
@@ -279,11 +291,9 @@
             document.getElementById('manage-event-panel').classList.add('hidden');
             document.getElementById('manage-event-arrow').classList.remove('rotate-180');
             
-            // Revert Header state (Removed emojis, kept text clean)
             document.getElementById('main-header-title').innerText = 'ADMIN CENTRAL';
             document.getElementById('main-header-title').classList.replace('text-lg', 'text-xl');
             
-            // UI Toggle: Show Logout, Hide Home
             document.getElementById('btn-home').classList.add('hidden');
             document.getElementById('btn-logout').classList.remove('hidden');
             
@@ -300,7 +310,6 @@
         let currentlyViewedPollId = null;
         let isCameraActive = false; 
         
-        // Tailwind vivid chart palette
         const colorPalette = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#06b6d4', '#8b5cf6', '#ec4899'];
 
         function getSortedData(scoresObj, optionsArray) {
@@ -319,13 +328,11 @@
             const poll = allPollsMap[pollId];
             currentlyViewedPollId = pollId;
 
-            // Hide Dashboard, show Detail View
             document.getElementById('dashboard-view').classList.add('hidden');
             document.getElementById('detail-view').classList.remove('hidden');
             
             document.getElementById('detail-title').innerText = poll.title + (poll.isActive ? " (LIVE)" : "");
             
-            // Dynamic text updates with perfectly suited emojis!
             if (poll.isActive) {
                 document.getElementById('main-header-title').innerText = 'LIVE POLL MANAGEMENT';
                 document.getElementById('main-header-title').classList.replace('text-xl', 'text-lg'); 
@@ -333,7 +340,6 @@
                 document.getElementById('main-header-title').innerText = 'ENDED POLLS';
             }
             
-            // UI Toggle: Show Home, Hide Logout
             document.getElementById('btn-home').classList.remove('hidden');
             document.getElementById('btn-logout').classList.add('hidden');
 
@@ -392,7 +398,6 @@
             });
         }
 
-        // Update chart colors if theme toggles while viewing
         const observer = new MutationObserver(() => {
             const isDark = document.documentElement.classList.contains('dark');
             Chart.defaults.color = isDark ? '#94a3b8' : '#475569';
@@ -456,13 +461,10 @@
             scanResultBox.innerText = "";
             try { html5QrCode.stop().then(() => { html5QrCode.clear(); }).catch(e => console.log(e)); } catch (error) { console.log("Scanner stopped."); }
         }
-
         btnStopScan.addEventListener('click', stopCamera);
 
-        // --- TOKEN DISPATCH LOGIC ---
         function dispatchTokens() {
             if (!confirm("Are you sure? This will generate PINs for ALL checked-in attendees.")) return;
-
             const dispatchBtn = document.getElementById('btn-dispatch');
             dispatchBtn.innerText = "⏳ Generating...";
             dispatchBtn.disabled = true;
@@ -508,7 +510,6 @@
             }
         }
 
-        // --- LIVE SOCKET CHART UPDATES ---
         const socket = io();
         socket.on('update_chart', function(data) {
             if (currentlyViewedPollId && allPollsMap[currentlyViewedPollId].isActive && currentChart) {

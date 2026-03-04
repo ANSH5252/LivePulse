@@ -24,7 +24,7 @@ redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'welcome'
 
 def get_db_connection():
     return mysql.connector.connect(
@@ -50,6 +50,17 @@ def load_user(user_id):
     conn.close()
     if user_data: return User(id=user_data['id'], username=user_data['username'], role=user_data['role'])
     return None
+
+@app.route('/welcome')
+def welcome():
+    # If the user is already logged in, skip the intro and go straight to the app
+    if current_user.is_authenticated:
+        if current_user.role == 'admin':
+            return redirect(url_for('admin_dashboard'))
+        return redirect(url_for('index'))
+        
+    # Otherwise, show them the cinematic intro
+    return render_template('landing.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -84,8 +95,8 @@ def login():
         return "❌ Invalid username or password. Try again!", 401
     return render_template('login.html')
 
-@app.route('/logout')
-@login_required
+# Removed @login_required to allow forced clear from JS Tab close
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
     logout_user()
     return redirect(url_for('login'))
