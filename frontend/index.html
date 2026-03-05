@@ -56,7 +56,7 @@
         </div>
         
         <div class="flex items-center gap-3 md:gap-5">
-            <div class="relative cursor-pointer text-2xl hover:scale-110 transition-transform" onclick="toggleNotifications()">
+            <div id="bell-icon-container" class="relative cursor-pointer text-2xl hover:scale-110 transition-transform" onclick="toggleNotifications()">
                 🔔 
                 <span id="notif-badge" class="hidden absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">0</span>
             </div>
@@ -83,7 +83,19 @@
         <div id="notification-dropdown" class="hidden absolute top-16 right-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 w-80 shadow-2xl rounded-xl z-50 p-4 transform origin-top-right transition-all">
             <h4 class="text-slate-800 dark:text-slate-200 font-bold border-b border-slate-100 dark:border-slate-700 pb-2 mb-2">Inbox</h4>
             <div id="notif-list" class="space-y-3 max-h-60 overflow-y-auto">
-                <p class="text-slate-500 dark:text-slate-400 text-sm text-center py-2">No new notifications</p>
+                {% if my_token %}
+                    <div class="bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 p-3 rounded-lg flex justify-between items-center">
+                        <div>
+                            <strong class="text-sm text-slate-800 dark:text-slate-200 block poll-title-display">{{ poll.title }}</strong>
+                            <span class="text-xs text-slate-500 dark:text-slate-400">PIN: <span class="font-mono text-indigo-600 dark:text-indigo-400 font-bold tracking-widest">*******</span></span>
+                        </div>
+                        <button onclick="copyToClipboard('{{ my_token }}', this)" class="bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-bold py-1.5 px-3 rounded shadow-sm transition-colors">
+                            Copy
+                        </button>
+                    </div>
+                {% else %}
+                    <p id="empty-notif" class="text-slate-500 dark:text-slate-400 text-sm text-center py-2">No new notifications</p>
+                {% endif %}
             </div>
         </div>
     </header>
@@ -132,14 +144,13 @@
 
     <main class="bg-white dark:bg-slate-800 p-6 md:p-10 rounded-2xl shadow-lg max-w-4xl mx-auto text-center border border-slate-100 dark:border-slate-700 relative z-10 transition-colors duration-300">
         
-        {% if not poll %}
-            <div class="py-10">
-                <div class="text-5xl mb-4">📡</div>
-                <h3 class="text-2xl font-bold text-slate-700 dark:text-slate-300">No Active Events</h3>
-                <p class="text-slate-500 mt-2 font-medium">Waiting for the administrator to launch the next poll...</p>
-            </div>
-        {% else %}
-            
+        <div id="no-poll-view" class="hidden py-10">
+            <div class="text-5xl mb-4">📡</div>
+            <h3 class="text-2xl font-bold text-slate-700 dark:text-slate-300">No Active Events</h3>
+            <p class="text-slate-500 mt-2 font-medium">Waiting for the administrator to launch the next poll...</p>
+        </div>
+        
+        <div id="poll-active-view" class="hidden">
             <div id="section-waiting" class="spa-section py-8">
                 <h2 class="text-2xl font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2">
                     <svg class="animate-spin h-6 w-6 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -153,7 +164,7 @@
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                 </div>
                 <h2 class="text-2xl font-extrabold text-slate-800 dark:text-slate-100">Security Gate</h2>
-                <p class="text-slate-600 dark:text-slate-400 mt-2 font-medium">You have successfully checked in for: <strong class="text-indigo-600 dark:text-indigo-400">{{ poll.title }}</strong></p>
+                <p class="text-slate-600 dark:text-slate-400 mt-2 font-medium">You have successfully checked in for: <strong class="poll-title-display text-indigo-600 dark:text-indigo-400">{{ poll.title if poll else '' }}</strong></p>
                 <p class="text-rose-500 font-bold text-sm mt-1 animate-pulse">Check your Notification Bell (🔔) for your secure 7-digit PIN.</p>
                 
                 <div class="mt-8 mb-6">
@@ -168,31 +179,52 @@
 
             <div id="section-vote" class="spa-section py-2">
                 <span class="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">🔓 Voting Unlocked</span>
-                <h2 class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-4 mb-6">{{ poll.title }}</h2>
+                <h2 class="poll-title-display text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-4 mb-6">{{ poll.title if poll else '' }}</h2>
                 
-                {% if has_voted %}
-                    <div class="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 p-6 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-3 text-lg shadow-sm">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Your secure vote has been recorded!
+                <div id="vote-content-area" class="relative mt-4 p-2 rounded-2xl overflow-hidden">
+                    
+                    <div id="poll-ended-overlay" class="hidden absolute inset-0 z-30 backdrop-blur-md bg-white/60 dark:bg-slate-900/60 flex flex-col items-center justify-center transition-all duration-300 border-2 border-rose-500/30 rounded-xl">
+                        <div class="text-5xl mb-3">🛑</div>
+                        <h3 class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 mb-2">Poll Ended</h3>
+                        <p class="text-slate-600 dark:text-slate-400 font-medium mb-6">The administrator has closed the voting gate.</p>
+                        <button onclick="showResults()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all">
+                            📊 View Final Results
+                        </button>
                     </div>
-                {% else %}
-                    <div id="voting-controls" class="flex flex-wrap justify-center gap-4 mt-6">
-                        {% for opt in options %}
-                            <button onclick="castVote({{ opt.id }}, '{{ opt.option_name }}')" 
-                                class="flex-1 min-w-[160px] bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 hover:text-white border-2 border-slate-200 dark:border-slate-600 hover:border-indigo-600 font-bold text-lg py-4 px-6 rounded-xl shadow-sm hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 group">
-                                <span class="block text-sm font-medium text-slate-500 dark:text-slate-400 group-hover:text-indigo-200 mb-1">Vote for</span>
-                                {{ opt.option_name }}
-                            </button>
-                        {% endfor %}
-                    </div>
-                {% endif %}
+                    
+                    <button id="btn-close-results" onclick="hideResults()" class="hidden absolute top-4 right-4 z-40 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-2.5 shadow-xl transition-transform hover:scale-110">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
 
-                <div class="relative h-80 w-full mt-10 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-600">
-                    <canvas id="liveChart"></canvas>
+                    <div id="voting-section-wrapper">
+                        {% if has_voted %}
+                            <div class="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 p-6 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-3 text-lg shadow-sm">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                Your secure vote has been recorded!
+                            </div>
+                        {% else %}
+                            <div id="voting-controls" class="flex flex-wrap justify-center gap-4 mt-6">
+                                {% if options %}
+                                    {% for opt in options %}
+                                        <button onclick="castVote({{ opt.id }}, '{{ opt.option_name }}')" 
+                                            class="flex-1 min-w-[160px] bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 hover:text-white border-2 border-slate-200 dark:border-slate-600 hover:border-indigo-600 font-bold text-lg py-4 px-6 rounded-xl shadow-sm hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 group">
+                                            <span class="block text-sm font-medium text-slate-500 dark:text-slate-400 group-hover:text-indigo-200 mb-1">Vote for</span>
+                                            {{ opt.option_name }}
+                                        </button>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="relative h-80 w-full mt-10 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-600">
+                        <canvas id="liveChart"></canvas>
+                    </div>
+
+                    <p id="winner-announcement" class="mt-6 text-xl font-extrabold text-indigo-600 dark:text-indigo-400 h-8"></p>
                 </div>
             </div>
-
-        {% endif %}
+        </div>
     </main>
 
     <div id="scan-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -207,43 +239,32 @@
     </div>
 
     <script>
-        // --- STRICT TAB SESSION MANAGEMENT ---
-        // This cleanly detects if the user is reloading the tab (allows access)
-        // or if they opened a brand new tab / closed the old one (forces logout).
         if (!sessionStorage.getItem('livepulse_tab_active')) {
             if (document.referrer.startsWith(window.location.origin)) {
-                // They just arrived securely from the login page
                 sessionStorage.setItem('livepulse_tab_active', 'true');
             } else {
-                // They opened a new tab or reopened a closed tab. Force logout immediately!
                 window.location.replace('/logout');
             }
         }
 
-        // --- THEME TOGGLE LOGIC ---
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
             document.getElementById('theme-toggle-dark-icon').classList.toggle('hidden', isDark);
             document.getElementById('theme-toggle-light-icon').classList.toggle('hidden', !isDark);
         }
-        
         function toggleTheme() {
             const html = document.documentElement;
             const isDark = html.classList.toggle('dark');
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
             updateThemeIcon();
         }
-        
         window.addEventListener('DOMContentLoaded', updateThemeIcon);
 
-        // --- QR CODE GENERATION LOGIC ---
         const qrData = "LIVEPULSE_USER_{{ user.id }}";
-        
         new QRCode(document.getElementById("qrcode-thumbnail"), {
             text: qrData, width: 100, height: 100,
             colorDark : "#1e293b", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H
         });
-
         new QRCode(document.getElementById("qrcode-expanded"), {
             text: qrData, width: 250, height: 250,
             colorDark : "#1e293b", colorLight : "#f8fafc", correctLevel : QRCode.CorrectLevel.H
@@ -253,141 +274,335 @@
             document.getElementById('qr-expand-modal').classList.remove('hidden');
             document.body.style.overflow = 'hidden'; 
         }
-
         function closeQrModal(event) {
             document.getElementById('qr-expand-modal').classList.add('hidden');
             document.body.style.overflow = 'auto'; 
         }
 
-        // --- REAL-TIME SOCKET & SPA LOGIC ---
         const socket = io();
         socket.on('connect', () => {
             socket.emit('join', { user_id: {{ user.id if user else 'null' }} });
         });
 
-        {% if poll %}
-            const pollId = {{ poll.id }};
-            const isPresent = {{ 'true' if is_present else 'false' }};
-            const hasVerified = {{ 'true' if has_verified else 'false' }};
-            
-            function showSection(sectionId) {
-                document.querySelectorAll('.spa-section').forEach(el => el.classList.remove('active-section'));
-                document.getElementById(sectionId).classList.add('active-section');
+        let pollId = {{ poll.id if poll else 'null' }};
+        let isPollActive = {{ 'true' if (poll and poll.is_active) else 'false' }};
+        let userId = {{ user.id }};
+        let isPresent = {{ 'true' if is_present else 'false' }};
+        let hasVerified = {{ 'true' if has_verified else 'false' }};
+        let colorMap = {};
+        let myChart = null;
+        let labels = [];
+        let dataPts = [];
+        let bgColors = [];
+        const colorPalette = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#06b6d4', '#8b5cf6', '#ec4899'];
+        let ctx = document.getElementById('liveChart').getContext('2d');
+
+        // ⚡ User-Scoped Memory Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!pollId) {
+                document.getElementById('no-poll-view').classList.remove('hidden');
+                return;
             }
 
-            if (hasVerified) { showSection('section-vote'); } 
-            else if (isPresent) { showSection('section-pin'); } 
-            else { showSection('section-waiting'); }
+            // Key now includes BOTH poll ID and user ID
+            const viewedKey = 'livepulse_viewed_results_poll_' + pollId + '_user_' + userId;
+            const hasViewedResults = localStorage.getItem(viewedKey) === 'true';
 
-            socket.on('scan_success', (data) => {
-                document.getElementById('modal-poll-name').innerText = data.poll_name;
-                document.getElementById('scan-modal').classList.remove('hidden');
+            if (!isPollActive && hasViewedResults) {
+                // They saw it already, hide everything
+                document.getElementById('no-poll-view').classList.remove('hidden');
+            } else {
+                document.getElementById('poll-active-view').classList.remove('hidden');
+                
+                if (!isPollActive && !hasViewedResults) {
+                    // Poll is over, but they haven't seen results yet! Show them the blurred overlay.
+                    showSection('section-vote');
+                    const votingWrapper = document.getElementById('voting-section-wrapper');
+                    if(votingWrapper) votingWrapper.classList.add('hidden');
+                    document.getElementById('poll-ended-overlay').classList.remove('hidden');
+                } else {
+                    if (hasVerified) { showSection('section-vote'); } 
+                    else if (isPresent) { showSection('section-pin'); } 
+                    else { showSection('section-waiting'); }
+                }
+            }
+        });
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.spa-section').forEach(el => el.classList.remove('active-section'));
+            document.getElementById(sectionId).classList.add('active-section');
+        }
+
+        socket.on('scan_success', (data) => {
+            document.getElementById('modal-poll-name').innerText = data.poll_name;
+            document.getElementById('scan-modal').classList.remove('hidden');
+        });
+
+        function proceedToPin() {
+            document.getElementById('scan-modal').classList.add('hidden');
+            showSection('section-pin');
+        }
+
+        socket.on('new_poll_started', (data) => {
+            pollId = data.poll.id;
+            isPollActive = true;
+            isPresent = false;
+            hasVerified = false;
+
+            document.getElementById('no-poll-view').classList.add('hidden');
+            document.getElementById('poll-active-view').classList.remove('hidden');
+            document.querySelectorAll('.poll-title-display').forEach(el => el.innerText = data.poll.title);
+            showSection('section-waiting');
+
+            const controlsDiv = document.createElement('div');
+            controlsDiv.id = "voting-controls";
+            controlsDiv.className = "flex flex-wrap justify-center gap-4 mt-6";
+            
+            data.options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.onclick = () => castVote(opt.id, opt.option_name);
+                btn.className = "flex-1 min-w-[160px] bg-slate-50 dark:bg-slate-700 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 hover:text-white border-2 border-slate-200 dark:border-slate-600 hover:border-indigo-600 font-bold text-lg py-4 px-6 rounded-xl shadow-sm hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 group";
+                btn.innerHTML = `<span class="block text-sm font-medium text-slate-500 dark:text-slate-400 group-hover:text-indigo-200 mb-1">Vote for</span>${opt.option_name}`;
+                controlsDiv.appendChild(btn);
             });
 
-            function proceedToPin() {
-                document.getElementById('scan-modal').classList.add('hidden');
-                showSection('section-pin');
+            const wrapper = document.getElementById('voting-section-wrapper');
+            wrapper.innerHTML = '';
+            wrapper.appendChild(controlsDiv);
+            wrapper.classList.remove('hidden');
+
+            if (myChart) { myChart.destroy(); }
+            labels = data.options.map(o => o.option_name);
+            dataPts = labels.map(() => 0);
+            
+            colorMap = {};
+            labels.forEach((optName, index) => {
+                colorMap[optName] = colorPalette[index % colorPalette.length];
+            });
+            bgColors = labels.map(l => colorMap[l]);
+
+            Chart.defaults.color = document.documentElement.classList.contains('dark') ? '#94a3b8' : '#64748b';
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Live Votes', data: dataPts, backgroundColor: bgColors, borderRadius: 6 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: document.documentElement.classList.contains('dark') ? '#334155' : '#e2e8f0' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } }, animation: { duration: 500, easing: 'easeOutQuart' } }
+            });
+
+            document.getElementById('poll-ended-overlay').classList.add('hidden');
+            document.getElementById('btn-close-results').classList.add('hidden');
+            const winnerEl = document.getElementById('winner-announcement');
+            if(winnerEl) winnerEl.innerText = "";
+
+            document.getElementById('notif-list').innerHTML = '<p id="empty-notif" class="text-slate-500 dark:text-slate-400 text-sm text-center py-2">No new notifications</p>';
+            document.getElementById('notif-badge').classList.add('hidden');
+            unreadCount = 0;
+        });
+
+        socket.on('poll_ended', (data) => {
+            if (pollId === data.poll_id) {
+                isPollActive = false;
+                showSection('section-vote');
+                const votingWrapper = document.getElementById('voting-section-wrapper');
+                if(votingWrapper) votingWrapper.classList.add('hidden');
+                document.getElementById('poll-ended-overlay').classList.remove('hidden');
+                
+                // ⚡ Insta-Clear Inbox so no residual PIN is left
+                document.getElementById('notif-list').innerHTML = '<p id="empty-notif" class="text-slate-500 dark:text-slate-400 text-sm text-center py-2">No new notifications</p>';
+                document.getElementById('notif-badge').classList.add('hidden');
+                unreadCount = 0;
+            }
+        });
+
+        function showResults() {
+            document.getElementById('poll-ended-overlay').classList.add('hidden');
+            document.getElementById('btn-close-results').classList.remove('hidden');
+
+            let maxVotes = -1;
+            let winners = [];
+            for (let i = 0; i < dataPts.length; i++) {
+                if (dataPts[i] > maxVotes) {
+                    maxVotes = dataPts[i];
+                    winners = [labels[i]];
+                } else if (dataPts[i] === maxVotes) {
+                    winners.push(labels[i]);
+                }
+            }
+            
+            let winnerText = "";
+            if (maxVotes === 0) {
+                winnerText = "No votes were cast.";
+            } else {
+                winnerText = `${winners.join(" and ")} got the majority of votes.`;
             }
 
-            let unreadCount = 0;
-            const notifList = document.getElementById('notif-list');
+            const winnerEl = document.getElementById('winner-announcement');
+            winnerEl.innerText = "";
+            let i = 0;
+            function typeWinner() {
+                if (i < winnerText.length) {
+                    winnerEl.textContent += winnerText.charAt(i);
+                    i++;
+                    setTimeout(typeWinner, 50);
+                }
+            }
+            setTimeout(typeWinner, 500); 
+        }
+
+        function hideResults() {
+            // Save the memory directly tied to this specific user
+            const viewedKey = 'livepulse_viewed_results_poll_' + pollId + '_user_' + userId;
+            localStorage.setItem(viewedKey, 'true');
             
-            socket.on('new_notification', (data) => {
-                unreadCount++;
-                const badge = document.getElementById('notif-badge');
+            // Absolutely destroy the poll UI and show the waiting screen
+            document.getElementById('poll-active-view').classList.add('hidden');
+            document.getElementById('no-poll-view').classList.remove('hidden');
+        }
+
+        let unreadCount = 0;
+        const notifKey = `livepulse_notif_seen_poll_${pollId}_user_${userId}`;
+        let hasSeen = localStorage.getItem(notifKey) === 'true';
+        const badge = document.getElementById('notif-badge');
+        const notifList = document.getElementById('notif-list');
+
+        {% if my_token %}
+            if (!hasSeen) {
+                unreadCount = 1;
                 badge.innerText = unreadCount;
                 badge.classList.remove('hidden');
+                badge.classList.add('flex');
+            }
+        {% endif %}
+        
+        socket.on('new_notification', (data) => {
+            localStorage.setItem(notifKey, 'false');
+            hasSeen = false;
 
-                if(unreadCount === 1) notifList.innerHTML = ''; 
+            unreadCount++;
+            badge.innerText = unreadCount;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
 
-                const item = document.createElement('div');
-                item.className = 'bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 p-3 rounded-lg flex justify-between items-center';
-                item.innerHTML = `
-                    <div>
-                        <strong class="text-sm text-slate-800 dark:text-slate-200 block">${data.poll_name}</strong>
-                        <span class="text-xs text-slate-500 dark:text-slate-400">PIN: <span class="font-mono text-indigo-600 dark:text-indigo-400 font-bold tracking-widest">*******</span></span>
-                    </div>
-                    <button onclick="copyToClipboard('${data.token}', this)" class="bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-bold py-1.5 px-3 rounded shadow-sm transition-colors">
-                        Copy
-                    </button>
-                `;
-                notifList.prepend(item);
+            const emptyMsg = document.getElementById('empty-notif');
+            if (emptyMsg) emptyMsg.remove();
+
+            const item = document.createElement('div');
+            item.className = 'bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 p-3 rounded-lg flex justify-between items-center';
+            item.innerHTML = `
+                <div>
+                    <strong class="text-sm text-slate-800 dark:text-slate-200 block poll-title-display">${data.poll_name}</strong>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">PIN: <span class="font-mono text-indigo-600 dark:text-indigo-400 font-bold tracking-widest">*******</span></span>
+                </div>
+                <button onclick="copyToClipboard('${data.token}', this)" class="bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-bold py-1.5 px-3 rounded shadow-sm transition-colors">
+                    Copy
+                </button>
+            `;
+            notifList.prepend(item);
+        });
+
+        function toggleNotifications() {
+            const drop = document.getElementById('notification-dropdown');
+            drop.classList.toggle('hidden');
+            if (!drop.classList.contains('hidden')) {
+                unreadCount = 0;
+                badge.classList.add('hidden');
+                badge.classList.remove('flex');
+                localStorage.setItem(notifKey, 'true');
+                hasSeen = true;
+            }
+        }
+        
+        // ⚡ Click-Outside Listener for the Inbox
+        document.addEventListener('click', function(event) {
+            const bellContainer = document.getElementById('bell-icon-container');
+            const dropdown = document.getElementById('notification-dropdown');
+            
+            if (dropdown && !dropdown.classList.contains('hidden')) {
+                // If they clicked outside the bell AND outside the dropdown box
+                if (!bellContainer.contains(event.target) && !dropdown.contains(event.target)) {
+                    dropdown.classList.add('hidden');
+                    unreadCount = 0;
+                    if(badge) badge.classList.add('hidden');
+                    localStorage.setItem(notifKey, 'true');
+                    hasSeen = true;
+                }
+            }
+        });
+
+        function copyToClipboard(realToken, btnElement) {
+            navigator.clipboard.writeText(realToken).then(() => {
+                const originalText = btnElement.innerText;
+                btnElement.innerText = "Copied!";
+                btnElement.classList.replace('bg-indigo-100', 'bg-emerald-100');
+                btnElement.classList.replace('text-indigo-700', 'text-emerald-700');
+                btnElement.classList.replace('dark:bg-indigo-900', 'dark:bg-emerald-900');
+                btnElement.classList.replace('dark:text-indigo-300', 'dark:text-emerald-300');
+                setTimeout(() => {
+                    btnElement.innerText = originalText;
+                    btnElement.classList.replace('bg-emerald-100', 'bg-indigo-100');
+                    btnElement.classList.replace('text-emerald-700', 'text-indigo-700');
+                    btnElement.classList.replace('dark:bg-emerald-900', 'dark:bg-indigo-900');
+                    btnElement.classList.replace('dark:text-emerald-300', 'dark:text-indigo-300');
+                }, 2000);
+            });
+        }
+
+        function verifyToken() {
+            const tokenInput = document.getElementById('token-input').value.trim().toUpperCase();
+            const errBox = document.getElementById('pin-error');
+            
+            if (tokenInput.length !== 7) {
+                errBox.innerText = "PIN must be exactly 7 characters.";
+                errBox.classList.remove('hidden');
+                return;
+            }
+
+            fetch('/api/verify_token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poll_id: pollId, token: tokenInput })
+            }).then(res => res.json()).then(data => {
+                if (data.error) {
+                    errBox.innerText = "❌ " + data.error;
+                    errBox.classList.remove('hidden');
+                } else {
+                    errBox.classList.add('hidden');
+                    showSection('section-vote');
+                }
+            });
+        }
+
+        function castVote(optId, optName) {
+            fetch('/api/vote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ poll_id: pollId, option_id: optId, option_name: optName })
+            }).then(res => res.json()).then(data => {
+                if (data.error) { alert("❌ " + data.error); } 
+                else { 
+                    sessionStorage.setItem('livepulse_tab_active', 'true');
+                    location.reload(); 
+                }
+            });
+        }
+
+        {% if poll %}
+            const optionsList = [];
+            {% for opt in options %}
+                optionsList.push("{{ opt.option_name }}");
+            {% endfor %}
+            
+            optionsList.forEach((optName, index) => {
+                colorMap[optName] = colorPalette[index % colorPalette.length];
             });
 
-            function toggleNotifications() {
-                const drop = document.getElementById('notification-dropdown');
-                drop.classList.toggle('hidden');
-                if (!drop.classList.contains('hidden')) {
-                    unreadCount = 0;
-                    document.getElementById('notif-badge').classList.add('hidden');
-                }
-            }
-
-            function copyToClipboard(realToken, btnElement) {
-                navigator.clipboard.writeText(realToken).then(() => {
-                    const originalText = btnElement.innerText;
-                    btnElement.innerText = "Copied!";
-                    btnElement.classList.replace('bg-indigo-100', 'bg-emerald-100');
-                    btnElement.classList.replace('text-indigo-700', 'text-emerald-700');
-                    btnElement.classList.replace('dark:bg-indigo-900', 'dark:bg-emerald-900');
-                    btnElement.classList.replace('dark:text-indigo-300', 'dark:text-emerald-300');
-                    setTimeout(() => {
-                        btnElement.innerText = originalText;
-                        btnElement.classList.replace('bg-emerald-100', 'bg-indigo-100');
-                        btnElement.classList.replace('text-emerald-700', 'text-indigo-700');
-                        btnElement.classList.replace('dark:bg-emerald-900', 'dark:bg-indigo-900');
-                        btnElement.classList.replace('dark:text-emerald-300', 'dark:text-indigo-300');
-                    }, 2000);
-                });
-            }
-
-            function verifyToken() {
-                const tokenInput = document.getElementById('token-input').value.trim().toUpperCase();
-                const errBox = document.getElementById('pin-error');
-                
-                if (tokenInput.length !== 7) {
-                    errBox.innerText = "PIN must be exactly 7 characters.";
-                    errBox.classList.remove('hidden');
-                    return;
-                }
-
-                fetch('/api/verify_token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ poll_id: pollId, token: tokenInput })
-                }).then(res => res.json()).then(data => {
-                    if (data.error) {
-                        errBox.innerText = "❌ " + data.error;
-                        errBox.classList.remove('hidden');
-                    } else {
-                        errBox.classList.add('hidden');
-                        showSection('section-vote');
-                    }
-                });
-            }
-
-            function castVote(optId, optName) {
-                fetch('/api/vote', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ poll_id: pollId, option_id: optId, option_name: optName })
-                }).then(res => res.json()).then(data => {
-                    if (data.error) { alert("❌ " + data.error); } 
-                    else { location.reload(); }
-                });
-            }
-
             const initialScores = {{ initial_scores | tojson | safe }};
-            const labels = Object.keys(initialScores);
-            const dataPts = Object.values(initialScores);
-            const colorPalette = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6'];
-            const bgColors = labels.map((_, i) => colorPalette[i % colorPalette.length]);
+            labels = Object.keys(initialScores);
+            dataPts = labels.map(l => initialScores[l]);
+            bgColors = labels.map(l => colorMap[l] || '#64748b'); 
 
-            const ctx = document.getElementById('liveChart').getContext('2d');
-            
             Chart.defaults.color = document.documentElement.classList.contains('dark') ? '#94a3b8' : '#64748b';
             
-            const myChart = new Chart(ctx, {
+            myChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
@@ -400,25 +615,30 @@
                         y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: document.documentElement.classList.contains('dark') ? '#334155' : '#e2e8f0' } },
                         x: { grid: { display: false } }
                     },
-                    plugins: { legend: { display: false } }
+                    plugins: { legend: { display: false } },
+                    animation: { duration: 500, easing: 'easeOutQuart' }
                 }
             });
-
-            socket.on('update_chart', (data) => {
-                myChart.data.datasets[0].data = myChart.data.labels.map(l => data[l] || 0);
-                myChart.update();
-            });
-            
-            const observer = new MutationObserver(() => {
-                const isDark = document.documentElement.classList.contains('dark');
-                Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
-                if(myChart.options.scales.y.grid) {
-                    myChart.options.scales.y.grid.color = isDark ? '#334155' : '#e2e8f0';
-                }
-                myChart.update();
-            });
-            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         {% endif %}
+
+        socket.on('update_chart', (data) => {
+            if (myChart) {
+                myChart.data.datasets[0].data = myChart.data.labels.map(l => data[l] || 0);
+                dataPts = myChart.data.datasets[0].data; 
+                myChart.update();
+            }
+        });
+        
+        const observer = new MutationObserver(() => {
+            const isDark = document.documentElement.classList.contains('dark');
+            Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
+            if(myChart && myChart.options.scales.y.grid) {
+                myChart.options.scales.y.grid.color = isDark ? '#334155' : '#e2e8f0';
+                myChart.update();
+            }
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        
     </script>
 </body>
 </html>
