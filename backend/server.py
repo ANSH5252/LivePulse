@@ -12,7 +12,6 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 # --- SETUP & INITIALIZATION ---
 load_dotenv(find_dotenv())
 
-# BULLETPROOF PATHS: Automatically find the frontend folder no matter where you run this script from
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend')
 
@@ -53,13 +52,10 @@ def load_user(user_id):
 
 @app.route('/welcome')
 def welcome():
-    # If the user is already logged in, skip the intro and go straight to the app
     if current_user.is_authenticated:
         if current_user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
         return redirect(url_for('index'))
-        
-    # Otherwise, show them the cinematic intro
     return render_template('landing.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -95,7 +91,6 @@ def login():
         return "❌ Invalid username or password. Try again!", 401
     return render_template('login.html')
 
-# Removed @login_required to allow forced clear from JS Tab close
 @app.route('/logout', methods=['GET', 'POST'])
 def logout():
     logout_user()
@@ -104,6 +99,7 @@ def logout():
 @socketio.on('join')
 def on_join(data):
     if data.get('user_id'): join_room(f"user_{data.get('user_id')}")
+    join_room('voters')
 
 @app.route('/')
 @login_required
@@ -111,7 +107,7 @@ def index():
     if current_user.role == 'admin': return redirect(url_for('admin_dashboard'))
 
     conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM polls WHERE is_active = TRUE ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT * FROM polls ORDER BY id DESC LIMIT 1")
     poll = cursor.fetchone()
     
     options, initial_scores = [], {}
@@ -124,23 +120,24 @@ def index():
         raw_scores = redis_client.hgetall(f"poll_{poll['id']}_results")
         for opt in options: initial_scores[opt['option_name']] = int(raw_scores.get(opt['option_name'], 0))
             
-        cursor.execute("SELECT is_present FROM event_attendees WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
-        att = cursor.fetchone()
-        if att and att['is_present']: is_present = True
-            
-        cursor.execute("SELECT is_used, token_code FROM poll_tokens WHERE used_by_user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
-        token_record = cursor.fetchone()
-        if token_record:
-            my_token = token_record['token_code'] # Now it persists even if used!
-            if token_record['is_used']: 
-                has_verified = True
-            
-        # Check Redis first for instant feedback, fallback to DB
-        if redis_client.sismember(f"poll_{poll['id']}_voted_users", current_user.id):
-            has_voted = True
-        else:
-            cursor.execute("SELECT id FROM user_votes WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
-            if cursor.fetchone(): has_voted = True
+        # ⚡ FIX: Only fetch security logic and PINs if the poll is actually running
+        if poll['is_active']:
+            cursor.execute("SELECT is_present FROM event_attendees WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
+            att = cursor.fetchone()
+            if att and att['is_present']: is_present = True
+                
+            cursor.execute("SELECT is_used, token_code FROM poll_tokens WHERE used_by_user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
+            token_record = cursor.fetchone()
+            if token_record:
+                my_token = token_record['token_code'] 
+                if token_record['is_used']: 
+                    has_verified = True
+                
+            if redis_client.sismember(f"poll_{poll['id']}_voted_users", current_user.id):
+                has_voted = True
+            else:
+                cursor.execute("SELECT id FROM user_votes WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
+                if cursor.fetchone(): has_voted = True
 
     cursor.close(); conn.close()
     return render_template('index.html', user=current_user, poll=poll, options=options, initial_scores=initial_scores, is_present=is_present, has_verified=has_verified, has_voted=has_voted, my_token=my_token)
@@ -162,18 +159,15 @@ def verify_token():
     finally:
         cursor.close(); conn.close()
 
-# --- NO DB WRITES OCCUR IN THIS ROUTE ANYMORE ---
 @app.route('/api/vote', methods=['POST'])
 @login_required
 def vote():
     poll_id, option_id, option_name = request.json.get('poll_id'), request.json.get('option_id'), request.json.get('option_name')
 
-    # 1. Instant Duplicate Check via Redis Memory
     voted_key = f"poll_{poll_id}_voted_users"
     if redis_client.sismember(voted_key, current_user.id):
         return jsonify({"error": "You have already voted on this poll!"}), 403
 
-    # 2. Verify PIN (Read-Only DB Call)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -183,11 +177,9 @@ def vote():
         cursor.close()
         conn.close()
 
-    # 3. Lock vote in Redis and update live chart
     redis_client.sadd(voted_key, current_user.id)
     redis_client.hincrby(f"poll_{poll_id}_results", option_name, 1)
 
-    # 4. Push payload to Redis Message Queue for the Worker to handle
     vote_payload = {
         "user_id": current_user.id,
         "poll_id": poll_id,
@@ -264,6 +256,8 @@ def end_poll():
     conn = get_db_connection(); cursor = conn.cursor()
     cursor.execute("UPDATE polls SET is_active = FALSE WHERE id = %s", (poll_id,))
     conn.commit(); cursor.close(); conn.close()
+    
+    socketio.emit('poll_ended', {'poll_id': poll_id}, to='voters')
     return jsonify({"message": "Ended!"}), 200
 
 @app.route('/admin', methods=['GET', 'POST'])
@@ -278,8 +272,19 @@ def admin_dashboard():
         cursor.execute("UPDATE polls SET is_active = FALSE")
         cursor.execute("INSERT INTO polls (title, is_active) VALUES (%s, TRUE)", (title,))
         new_poll_id = cursor.lastrowid
-        for option_name in valid_options: cursor.execute("INSERT INTO poll_options (poll_id, option_name) VALUES (%s, %s)", (new_poll_id, option_name))
-        conn.commit(); return redirect(url_for('admin_dashboard'))
+        
+        options_data = []
+        for option_name in valid_options: 
+            cursor.execute("INSERT INTO poll_options (poll_id, option_name) VALUES (%s, %s)", (new_poll_id, option_name))
+            options_data.append({'id': cursor.lastrowid, 'option_name': option_name})
+        conn.commit()
+        
+        socketio.emit('new_poll_started', {
+            'poll': {'id': new_poll_id, 'title': title, 'is_active': True},
+            'options': options_data
+        }, to='voters')
+        
+        return redirect(url_for('admin_dashboard'))
 
     def fetch_poll_details(query):
         cursor.execute(query); polls = cursor.fetchall()
