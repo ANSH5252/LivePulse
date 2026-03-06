@@ -4,6 +4,7 @@ import mysql.connector
 import secrets
 import string
 import json
+import hashlib
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_socketio import SocketIO, join_room, leave_room
 from dotenv import load_dotenv, find_dotenv
@@ -100,6 +101,8 @@ def logout():
 def on_join(data):
     if data.get('user_id'): join_room(f"user_{data.get('user_id')}")
     join_room('voters')
+    if current_user.is_authenticated and current_user.role == 'admin':
+        join_room('admins')
 
 @app.route('/')
 @login_required
@@ -120,7 +123,6 @@ def index():
         raw_scores = redis_client.hgetall(f"poll_{poll['id']}_results")
         for opt in options: initial_scores[opt['option_name']] = int(raw_scores.get(opt['option_name'], 0))
             
-        # ⚡ FIX: Only fetch security logic and PINs if the poll is actually running
         if poll['is_active']:
             cursor.execute("SELECT is_present FROM event_attendees WHERE user_id=%s AND poll_id=%s", (current_user.id, poll['id']))
             att = cursor.fetchone()
@@ -180,6 +182,7 @@ def vote():
     redis_client.sadd(voted_key, current_user.id)
     redis_client.hincrby(f"poll_{poll_id}_results", option_name, 1)
 
+    # ⚡ RESTORED: Push payload to Redis Message Queue for the background worker to handle database inserts
     vote_payload = {
         "user_id": current_user.id,
         "poll_id": poll_id,
@@ -189,6 +192,8 @@ def vote():
     redis_client.lpush("vote_queue", json.dumps(vote_payload))
 
     socketio.emit('update_chart', redis_client.hgetall(f"poll_{poll_id}_results"))
+    socketio.emit('participant_voted', {'poll_id': poll_id, 'user_id': current_user.id}, to='admins')
+    
     return jsonify({"message": "Vote cast successfully!"}), 200
 
 @app.route('/api/admin/scan_ticket', methods=['POST'])
@@ -209,8 +214,24 @@ def scan_ticket():
         if cursor.fetchone(): return jsonify({"error": "Already Scanned! User is already checked in."}), 400
 
         cursor.execute("INSERT INTO event_attendees (user_id, poll_id, is_present) VALUES (%s, %s, TRUE)", (scanned_user_id, poll_id))
+        
+        cursor.execute("SELECT username FROM users WHERE id = %s", (scanned_user_id,))
+        user_data = cursor.fetchone()
+        uname = user_data['username'] if user_data else f"User {scanned_user_id}"
+        
         conn.commit()
+        
         socketio.emit('scan_success', {'poll_id': poll_id, 'poll_name': active_poll['title']}, to=f"user_{scanned_user_id}")
+        
+        socketio.emit('participant_added', {
+            'poll_id': poll_id,
+            'user_id': scanned_user_id,
+            'name': uname,
+            'event_name': active_poll['title'],
+            'pin': "",
+            'voted': False
+        }, to='admins')
+        
         return jsonify({"message": "Check-in successful!"}), 200
     finally:
         cursor.close(); conn.close()
@@ -237,9 +258,47 @@ def dispatch_tokens():
             socketio.emit('new_notification', {'poll_name': poll_title, 'token': token}, to=f"user_{attendee['id']}")
         
         conn.commit()
+        socketio.emit('pins_generated', {'poll_id': poll_id}, to='admins')
+        
         return jsonify({"message": f"✅ Successfully generated {len(attendees)} PINs!"}), 200
     finally:
         cursor.close(); conn.close()
+
+@app.route('/api/admin/participants/<int:poll_id>')
+@login_required
+def get_participants(poll_id):
+    if current_user.role != 'admin': return jsonify({"error": "Unauthorized"}), 403
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    query = """
+        SELECT u.id as user_id, u.username as name, p.title as event_name, pt.token_code
+        FROM event_attendees ea
+        JOIN users u ON ea.user_id = u.id
+        JOIN polls p ON ea.poll_id = p.id
+        LEFT JOIN poll_tokens pt ON pt.used_by_user_id = u.id AND pt.poll_id = p.id
+        WHERE ea.poll_id = %s AND ea.is_present = TRUE
+    """
+    cursor.execute(query, (poll_id,))
+    attendees = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    voted_users = redis_client.smembers(f"poll_{poll_id}_voted_users")
+    
+    results = []
+    for a in attendees:
+        hashed_pin = hashlib.sha256(a['token_code'].encode()).hexdigest()[:8].upper() if a['token_code'] else ""
+        has_voted = str(a['user_id']) in voted_users
+        
+        results.append({
+            "user_id": a['user_id'],
+            "name": a['name'],
+            "event_name": a['event_name'],
+            "pin": hashed_pin,
+            "voted": has_voted
+        })
+    return jsonify(results)
 
 @app.route('/api/admin/simulate', methods=['POST'])
 @login_required
