@@ -150,25 +150,27 @@
             
             <div id="manage-event-panel" class="hidden bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-8 space-y-6">
                 
-                <div class="border-b border-slate-200 dark:border-slate-700 pb-6">
-                    <h3 class="text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">📷 Scan QRs for this Event</h3>
+                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center">
+                    <h3 class="text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">📷 Scan QRs & Track Users</h3>
                     <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Check attendees into this specific poll.</p>
-                    <button id="btn-start-scan" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors">Start Scanner</button>
-                    <button id="btn-stop-scan" class="hidden bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors">Stop Camera</button>
+                    <button id="btn-start-scan" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors mx-auto">Start Scanner</button>
+                    <button id="btn-stop-scan" class="hidden bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors mx-auto">Stop Camera</button>
                     <div id="reader" class="hidden w-full max-w-sm mx-auto mt-6 rounded-xl overflow-hidden border-4 border-cyan-500 shadow-lg"></div>
                     <div id="scan-result" class="mt-4 font-bold text-lg text-center"></div>
                 </div>
 
-                <div class="border-b border-slate-200 dark:border-slate-700 pb-6">
-                    <h3 class="text-xl font-bold text-indigo-600 dark:text-indigo-400 mb-1">📨 Dispatch Voting PINs</h3>
-                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Securely generate 7-digit voting PINs for everyone checked in.</p>
-                    <button id="btn-dispatch" onclick="dispatchTokens()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors">Generate & Dispatch PINs</button>
+                <div class="border-b border-slate-200 dark:border-slate-700 pb-6 text-center">
+                    <h3 class="text-xl font-bold text-indigo-600 dark:text-indigo-400 mb-1">👥 Participant Management</h3>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">View checked-in users, dispatch PINs, and track live voting status.</p>
+                    <button onclick="openParticipantsModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors mx-auto">
+                        Open Participants Dashboard
+                    </button>
                 </div>
 
                 <div>
-                    <h3 class="text-xl font-bold text-rose-500 dark:text-rose-400 mb-1">🛠️ Traffic Simulator (Admin Only)</h3>
-                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Inject test votes to verify live chart reactivity.</p>
-                    <div class="flex flex-wrap items-center gap-3">
+                    <h3 class="text-xl font-bold text-rose-500 dark:text-rose-400 mb-1 text-center">🛠️ Traffic Simulator (Admin Only)</h3>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm mb-4 text-center">Inject test votes to verify live chart reactivity.</p>
+                    <div class="flex flex-wrap items-center justify-center gap-3">
                         <input type="number" id="sim-count" value="25" min="1" class="w-24 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-rose-500 outline-none">
                         <select id="sim-option" class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-rose-500 outline-none"></select>
                         <button onclick="simulateVotes()" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors">Inject Fake Votes</button>
@@ -212,21 +214,47 @@
         </div>
     </div>
 
+    <div id="participantsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-4xl relative border border-slate-200 dark:border-slate-700 max-h-[85vh] flex flex-col">
+            <button onclick="closeParticipantsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-4 mb-4 shrink-0">
+                <h2 class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">Participants' Details</h2>
+                <button onclick="dispatchTokens()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors mr-6">
+                    Generate & Dispatch PINs
+                </button>
+            </div>
+            
+            <div class="overflow-y-auto flex-grow">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                            <th class="p-3 font-bold border-b border-slate-200 dark:border-slate-600 rounded-tl-lg">User ID</th>
+                            <th class="p-3 font-bold border-b border-slate-200 dark:border-slate-600">Name</th>
+                            <th class="p-3 font-bold border-b border-slate-200 dark:border-slate-600">Event Name</th>
+                            <th class="p-3 font-bold border-b border-slate-200 dark:border-slate-600">Unique PIN</th>
+                            <th class="p-3 font-bold border-b border-slate-200 dark:border-slate-600 text-center rounded-tr-lg">Voted</th>
+                        </tr>
+                    </thead>
+                    <tbody id="participants-tbody" class="text-slate-700 dark:text-slate-200">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- STRICT TAB SESSION MANAGEMENT ---
-        // This cleanly detects if the user is reloading the tab (allows access)
-        // or if they opened a brand new tab / closed the old one (forces logout).
         if (!sessionStorage.getItem('livepulse_tab_active')) {
             if (document.referrer.startsWith(window.location.origin)) {
-                // They just arrived securely from the login page
                 sessionStorage.setItem('livepulse_tab_active', 'true');
             } else {
-                // They opened a new tab or reopened a closed tab. Force logout immediately!
                 window.location.replace('/logout');
             }
         }
 
-        // --- THEME TOGGLE LOGIC ---
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
             document.getElementById('theme-toggle-dark-icon').classList.toggle('hidden', isDark);
@@ -270,7 +298,6 @@
         }
         setTimeout(() => { if(acc.length > 0) { acc[0].click(); acc[1].click(); } }, 100);
 
-        // --- MANAGE EVENT TOGGLE ---
         function toggleManageEvent() {
             const panel = document.getElementById('manage-event-panel');
             const arrow = document.getElementById('manage-event-arrow');
@@ -283,7 +310,6 @@
             }
         }
 
-        // --- NAVIGATION LOGIC ---
         function goHome() {
             stopCamera();
             document.getElementById('detail-view').classList.add('hidden');
@@ -330,7 +356,6 @@
 
             document.getElementById('dashboard-view').classList.add('hidden');
             document.getElementById('detail-view').classList.remove('hidden');
-            
             document.getElementById('detail-title').innerText = poll.title + (poll.isActive ? " (LIVE)" : "");
             
             if (poll.isActive) {
@@ -380,13 +405,7 @@
                     responsive: true, 
                     maintainAspectRatio: false,
                     plugins: {
-                        title: {
-                            display: true,
-                            text: 'Total Votes = ' + totalVotes,
-                            font: { size: 20, weight: '800' },
-                            padding: { top: 10, bottom: 20 },
-                            color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#1e293b'
-                        },
+                        title: { display: true, text: 'Total Votes = ' + totalVotes, font: { size: 20, weight: '800' }, padding: { top: 10, bottom: 20 }, color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#1e293b' },
                         legend: { display: false }
                     },
                     scales: { 
@@ -466,16 +485,22 @@
         function dispatchTokens() {
             if (!confirm("Are you sure? This will generate PINs for ALL checked-in attendees.")) return;
             const dispatchBtn = document.getElementById('btn-dispatch');
-            dispatchBtn.innerText = "⏳ Generating...";
-            dispatchBtn.disabled = true;
+            
+            // If the dispatch button is the one inside the modal, handle its text appropriately
+            if(dispatchBtn) {
+                dispatchBtn.innerText = "⏳ Generating...";
+                dispatchBtn.disabled = true;
+            }
 
             fetch('/api/admin/dispatch_tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ poll_id: currentlyViewedPollId })
             }).then(res => res.json()).then(data => {
-                dispatchBtn.innerText = "Generate & Dispatch PINs";
-                dispatchBtn.disabled = false;
+                if(dispatchBtn) {
+                    dispatchBtn.innerText = "Generate & Dispatch PINs";
+                    dispatchBtn.disabled = false;
+                }
                 if (data.error) alert("❌ " + data.error);
                 else alert("✅ " + data.message);
             });
@@ -510,7 +535,59 @@
             }
         }
 
+        // --- REAL-TIME PARTICIPANTS TABLE LOGIC ---
+
+        function renderParticipantRow(p) {
+            const tr = document.createElement('tr');
+            tr.id = `participant-row-${p.user_id}`;
+            tr.className = "border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors";
+            
+            const pinHtml = p.pin 
+                ? `<span class="font-mono text-xs bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded border border-slate-300 dark:border-slate-600">${p.pin}</span>` 
+                : `<span class="text-slate-400 italic text-sm">Pending</span>`;
+                
+            const voteHtml = p.voted 
+                ? `<span class="text-emerald-500 font-bold voted-cell">✅</span>` 
+                : `<span class="text-rose-500 font-bold voted-cell">❌</span>`;
+
+            tr.innerHTML = `
+                <td class="p-3">#${p.user_id}</td>
+                <td class="p-3 font-medium">${p.name}</td>
+                <td class="p-3 text-sm text-slate-500 dark:text-slate-400">${p.event_name}</td>
+                <td class="p-3">${pinHtml}</td>
+                <td class="p-3 text-center">${voteHtml}</td>
+            `;
+            return tr;
+        }
+
+        function openParticipantsModal() {
+            document.getElementById('participantsModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            
+            fetch('/api/admin/participants/' + currentlyViewedPollId)
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('participants-tbody');
+                    tbody.innerHTML = '';
+                    if (data.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-500">No participants have checked in yet.</td></tr>`;
+                    } else {
+                        data.forEach(p => tbody.appendChild(renderParticipantRow(p)));
+                    }
+                });
+        }
+
+        function closeParticipantsModal() {
+            document.getElementById('participantsModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // --- LIVE SOCKET ADMIN UPDATES ---
         const socket = io();
+        socket.on('connect', () => {
+            socket.emit('join', { user_id: {{ user.id if user else 'null' }} });
+        });
+
         socket.on('update_chart', function(data) {
             if (currentlyViewedPollId && allPollsMap[currentlyViewedPollId].isActive && currentChart) {
                 const poll = allPollsMap[currentlyViewedPollId];
@@ -526,6 +603,35 @@
                 currentChart.update();
             }
         });
+
+        // ⚡ Admin Table Real-Time Listeners
+        socket.on('participant_added', function(data) {
+            if (currentlyViewedPollId === data.poll_id && !document.getElementById('participantsModal').classList.contains('hidden')) {
+                const tbody = document.getElementById('participants-tbody');
+                if (tbody.innerHTML.includes('No participants')) tbody.innerHTML = '';
+                tbody.appendChild(renderParticipantRow(data));
+            }
+        });
+
+        socket.on('pins_generated', function(data) {
+            if (currentlyViewedPollId === data.poll_id && !document.getElementById('participantsModal').classList.contains('hidden')) {
+                openParticipantsModal(); 
+            }
+        });
+
+        socket.on('participant_voted', function(data) {
+            if (currentlyViewedPollId === data.poll_id && !document.getElementById('participantsModal').classList.contains('hidden')) {
+                const row = document.getElementById('participant-row-' + data.user_id);
+                if (row) {
+                    const voteCell = row.querySelector('.voted-cell');
+                    if (voteCell) {
+                        voteCell.innerHTML = '✅';
+                        voteCell.className = "text-emerald-500 font-bold voted-cell text-lg animate-[ping_1s_ease-in-out_2]";
+                    }
+                }
+            }
+        });
+
     </script>
 </body>
 </html>
