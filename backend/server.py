@@ -182,7 +182,6 @@ def vote():
     redis_client.sadd(voted_key, current_user.id)
     redis_client.hincrby(f"poll_{poll_id}_results", option_name, 1)
 
-    # ⚡ RESTORED: Push payload to Redis Message Queue for the background worker to handle database inserts
     vote_payload = {
         "user_id": current_user.id,
         "poll_id": poll_id,
@@ -288,14 +287,15 @@ def get_participants(poll_id):
     
     results = []
     for a in attendees:
-        hashed_pin = hashlib.sha256(a['token_code'].encode()).hexdigest()[:8].upper() if a['token_code'] else ""
+        # ⚡ FIX: Passes the exact 7-character PIN so it perfectly matches the user's inbox
+        display_pin = a['token_code'] if a['token_code'] else ""
         has_voted = str(a['user_id']) in voted_users
         
         results.append({
             "user_id": a['user_id'],
             "name": a['name'],
             "event_name": a['event_name'],
-            "pin": hashed_pin,
+            "pin": display_pin,
             "voted": has_voted
         })
     return jsonify(results)
