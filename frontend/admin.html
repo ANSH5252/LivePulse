@@ -486,7 +486,6 @@
             if (!confirm("Are you sure? This will generate PINs for ALL checked-in attendees.")) return;
             const dispatchBtn = document.getElementById('btn-dispatch');
             
-            // If the dispatch button is the one inside the modal, handle its text appropriately
             if(dispatchBtn) {
                 dispatchBtn.innerText = "⏳ Generating...";
                 dispatchBtn.disabled = true;
@@ -535,23 +534,47 @@
             }
         }
 
-        // --- REAL-TIME PARTICIPANTS TABLE LOGIC ---
+        // --- ⚡ NEW: PIN Masking Helper Functions ---
+        function handlePinDblClick(el) {
+            // Reveal the PIN and add a highlight color
+            el.innerText = el.dataset.pin;
+            el.dataset.state = 'revealed';
+            el.classList.add('text-indigo-600', 'dark:text-indigo-400');
+        }
 
+        function handlePinClick(el) {
+            // Only hide it if it is currently revealed (prevents conflict with double-click)
+            if (el.dataset.state === 'revealed') {
+                el.innerText = '•••••••';
+                el.dataset.state = 'hidden';
+                el.classList.remove('text-indigo-600', 'dark:text-indigo-400');
+            }
+        }
+
+        // --- REAL-TIME PARTICIPANTS TABLE LOGIC ---
         function renderParticipantRow(p) {
             const tr = document.createElement('tr');
             tr.id = `participant-row-${p.user_id}`;
             tr.className = "border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors";
             
+            // ⚡ FIX: Uses ••••••• by default. Stores the real PIN in data-pin. 
+            // Added select-none so double-clicking doesn't highlight the text awkwardly.
             const pinHtml = p.pin 
-                ? `<span class="font-mono text-xs bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded border border-slate-300 dark:border-slate-600">${p.pin}</span>` 
+                ? `<span class="font-mono text-sm bg-slate-200 dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 tracking-widest cursor-pointer select-none transition-colors hover:bg-slate-300 dark:hover:bg-slate-700" 
+                         data-pin="${p.pin}" 
+                         data-state="hidden" 
+                         ondblclick="handlePinDblClick(this)" 
+                         onclick="handlePinClick(this)"
+                         title="Double-click to reveal, single-click to hide">•••••••</span>` 
                 : `<span class="text-slate-400 italic text-sm">Pending</span>`;
-                
+        
             const voteHtml = p.voted 
                 ? `<span class="text-emerald-500 font-bold voted-cell">✅</span>` 
                 : `<span class="text-rose-500 font-bold voted-cell">❌</span>`;
 
+            // Ensured the '#' is removed from the User ID column
             tr.innerHTML = `
-                <td class="p-3">#${p.user_id}</td>
+                <td class="p-3">${p.user_id}</td>
                 <td class="p-3 font-medium">${p.name}</td>
                 <td class="p-3 text-sm text-slate-500 dark:text-slate-400">${p.event_name}</td>
                 <td class="p-3">${pinHtml}</td>
