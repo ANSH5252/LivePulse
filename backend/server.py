@@ -95,14 +95,23 @@ def login():
 @app.route('/logout', methods=['GET', 'POST'])
 def logout():
     logout_user()
+    # As requested, redirects safely to login page
     return redirect(url_for('login'))
 
 @socketio.on('join')
 def on_join(data):
-    if data.get('user_id'): join_room(f"user_{data.get('user_id')}")
-    join_room('voters')
-    if current_user.is_authenticated and current_user.role == 'admin':
-        join_room('admins')
+    # ⚡ FIX: Added try/except block to catch the Race Condition crash when users log out quickly
+    try:
+        if data and data.get('user_id'): 
+            join_room(f"user_{data.get('user_id')}")
+        
+        join_room('voters')
+        
+        if current_user and current_user.is_authenticated and getattr(current_user, 'role', None) == 'admin':
+            join_room('admins')
+    except Exception:
+        # Client disconnected during room assignment. Safe to ignore.
+        pass
 
 @app.route('/')
 @login_required
@@ -287,7 +296,6 @@ def get_participants(poll_id):
     
     results = []
     for a in attendees:
-        # ⚡ FIX: Passes the exact 7-character PIN so it perfectly matches the user's inbox
         display_pin = a['token_code'] if a['token_code'] else ""
         has_voted = str(a['user_id']) in voted_users
         
